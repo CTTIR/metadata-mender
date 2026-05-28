@@ -5,7 +5,7 @@ Thanks for your interest in improving Metadata Mender.
 ## Reporting bugs and requesting features
 
 Open an issue at
-<https://github.com/r-heller/metadata-mender/issues>. The issue templates
+<https://github.com/CTTIR/metadata-mender/issues>. The issue templates
 will prompt you for the relevant details (Zotero version, OS, a sample
 item or DOI that reproduces the problem). Output from **Help → Debug
 Output** is almost always useful for bug reports.

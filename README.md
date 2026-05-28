@@ -1,6 +1,8 @@
+<img src="icon.svg" alt="Metadata Mender icon" width="96" align="right" />
+
 # Metadata Mender
 
-A Zotero 7 plugin that reconciles and completes item metadata by looking up the
+A Zotero 9+ plugin that reconciles and completes item metadata by looking up the
 item's **DOI**, **PMID**, or **CRAN package id** against eight free databases —
 **PubMed (NCBI E-utilities)**, **OpenAlex**, **Crossref**, **Semantic Scholar**,
 **OpenAIRE** (grey literature), **Unpaywall**, **CORE**, and **CRAN** (R
@@ -155,17 +157,16 @@ reads "Cancelled. …" with whatever was accumulated so far.
 
 ## Install
 
-**Compatibility:** Zotero 7 and newer (`strict_min_version 6.999`,
-`strict_max_version 9.*`). Not compatible with Zotero 6.
+**Compatibility:** Zotero 9 and later.
 
 1. Download `metadata-mender-<version>.xpi` from the
-   [Releases page](https://github.com/r-heller/metadata-mender/releases).
+   [Releases page](https://github.com/CTTIR/metadata-mender/releases).
 2. In Zotero: **Tools → Plugins → gear icon → Install Plugin From File…**
 3. Select the `.xpi`. Restart Zotero if prompted.
 
 ## Documentation
 
-Full walkthrough and screenshots: <https://r-heller.github.io/metadata-mender/>.
+Full walkthrough and screenshots: <https://cttir.github.io/metadata-mender/>.
 
 ## Build from source
 
@@ -223,7 +224,7 @@ If Metadata Mender contributes to a publication, please cite it.
              Scholar, OpenAIRE, Unpaywall, CORE, and CRAN},
   year    = {2026},
   version = {0.6.0},
-  url     = {https://github.com/r-heller/metadata-mender},
+  url     = {https://github.com/CTTIR/metadata-mender},
   license = {MIT}
 }
 ```
@@ -233,7 +234,7 @@ If Metadata Mender contributes to a publication, please cite it.
 > Heller, R. (2026). *Metadata Mender: a Zotero plugin for reconciling item
 > metadata against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE,
 > Unpaywall, CORE, and CRAN* (Version 0.6.0) [Computer software].
-> https://github.com/r-heller/metadata-mender
+> https://github.com/CTTIR/metadata-mender
 
 > **DOI:** none yet. To mint one, archive a tagged release on
 > [Zenodo](https://zenodo.org/account/settings/github/) (enable the repo,
@@ -242,9 +243,9 @@ If Metadata Mender contributes to a publication, please cite it.
 
 ## Links
 
-- Documentation: <https://r-heller.github.io/metadata-mender/>
-- Issues: <https://github.com/r-heller/metadata-mender/issues>
-- Releases: <https://github.com/r-heller/metadata-mender/releases>
+- Documentation: <https://cttir.github.io/metadata-mender/>
+- Issues: <https://github.com/CTTIR/metadata-mender/issues>
+- Releases: <https://github.com/CTTIR/metadata-mender/releases>
 
 ## License
 

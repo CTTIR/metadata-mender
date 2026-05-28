@@ -4,9 +4,11 @@ subtitle: "Reconcile and complete Zotero metadata from PubMed, OpenAlex, Crossre
 author: "Raban Heller"
 ---
 
+![](images/icon.svg){width=96px fig-alt="Metadata Mender icon — solid black square on white background"}
+
 ## What it is
 
-**Metadata Mender** is a Zotero 7 plugin that takes the items you already
+**Metadata Mender** is a Zotero 9+ plugin that takes the items you already
 have and *mends* them: it looks up each item's DOI, PMID, or CRAN package
 id against eight free databases and fills in the gaps — title, journal,
 volume/issue/pages, ISSN, authors, abstract, URL, publisher — while also
@@ -18,11 +20,10 @@ Zotero and simply want the metadata to be *complete and correct*.
 
 ## Install
 
-**Compatibility:** Zotero 7+ (declared `strict_min_version 6.999`,
-`strict_max_version 9.*`).
+**Compatibility:** Zotero 9 and later.
 
 1. Download the latest `metadata-mender-<version>.xpi` from the
-   [Releases page](https://github.com/r-heller/metadata-mender/releases).
+   [Releases page](https://github.com/CTTIR/metadata-mender/releases).
 2. In Zotero open **Tools → Plugins**, click the gear icon, and choose
    **Install Plugin From File…**.
 3. Select the `.xpi` and restart Zotero if prompted.
@@ -132,5 +133,29 @@ plugin is plain bootstrapped JS zipped into an XPI.
 
 ## Cite
 
-See the [How to cite](https://github.com/r-heller/metadata-mender#how-to-cite)
-section of the README for a ready-to-copy BibTeX entry and APA citation.
+If you use Metadata Mender in published work, please cite it. The
+canonical metadata lives in
+[`CITATION.cff`](https://github.com/CTTIR/metadata-mender/blob/main/CITATION.cff).
+
+**BibTeX**
+
+```bibtex
+@software{heller_metadata_mender_2026,
+  author  = {Heller, Raban},
+  title   = {Metadata Mender: a Zotero plugin for reconciling item metadata
+             against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE,
+             Unpaywall, CORE, and CRAN},
+  year    = {2026},
+  version = {0.6.0},
+  license = {MIT},
+  url     = {https://github.com/CTTIR/metadata-mender},
+  note    = {R package / Zotero 9+ plugin}
+}
+```
+
+**APA**
+
+> Heller, R. (2026). *Metadata Mender: a Zotero plugin for reconciling
+> item metadata against PubMed, OpenAlex, Crossref, Semantic Scholar,
+> OpenAIRE, Unpaywall, CORE, and CRAN* (Version 0.6.0) [Computer
+> software]. https://github.com/CTTIR/metadata-mender

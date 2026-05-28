@@ -27,5 +27,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Legacy provenance/citation lines are migrated to the current format
   on first run.
 
-[Unreleased]: https://github.com/r-heller/metadata-mender/compare/v0.6.0...HEAD
-[0.6.0]: https://github.com/r-heller/metadata-mender/releases/tag/v0.6.0
+[Unreleased]: https://github.com/CTTIR/metadata-mender/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/CTTIR/metadata-mender/releases/tag/v0.6.0

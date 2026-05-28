@@ -173,7 +173,7 @@ Zotero.MetadataMender = {
   _userAgent() {
     const mailto = this.getPref(this.PREFS.crossrefMailto);
     const tail = mailto ? `; mailto:${mailto})` : ")";
-    return `MetadataMender/${this.version || "0.1.0"} (https://github.com/r-heller/metadata-mender${tail}`;
+    return `MetadataMender/${this.version || "0.1.0"} (https://github.com/CTTIR/metadata-mender${tail}`;
   },
 
   _today() {
