@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<!-- Metadata Mender preferences pane -->
+<vbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+      xmlns:html="http://www.w3.org/1999/xhtml">
+
+  <groupbox>
+    <label><html:h2 data-l10n-id="mm-prefs-keys-header">API access</html:h2></label>
+    <description class="mm-hint" data-l10n-id="mm-prefs-keys-hint">
+      All fields are optional. Keys raise your rate limits and (for OpenAlex) are
+      needed for use beyond the free daily allowance. A contact email puts
+      Crossref requests into the faster polite pool.
+    </description>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-mailto" control="mm-mailto"
+             value="Contact email (mailto):" />
+      <html:input id="mm-mailto" type="email" style="flex:1"
+                  preference="extensions.metadata-mender.crossrefMailto" />
+    </hbox>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-openalex" control="mm-openalex"
+             value="OpenAlex API key:" />
+      <html:input id="mm-openalex" type="password" style="flex:1"
+                  preference="extensions.metadata-mender.openalexKey" />
+    </hbox>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-ncbi" control="mm-ncbi"
+             value="NCBI (PubMed) API key:" />
+      <html:input id="mm-ncbi" type="password" style="flex:1"
+                  preference="extensions.metadata-mender.ncbiKey" />
+    </hbox>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-crossref-plus" control="mm-crplus"
+             value="Crossref Plus token:" />
+      <html:input id="mm-crplus" type="password" style="flex:1"
+                  preference="extensions.metadata-mender.crossrefPlusToken" />
+    </hbox>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-semanticscholar" control="mm-s2"
+             value="Semantic Scholar API key:" />
+      <html:input id="mm-s2" type="password" style="flex:1"
+                  preference="extensions.metadata-mender.semanticScholarKey" />
+    </hbox>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-core" control="mm-core"
+             value="CORE API key:" />
+      <html:input id="mm-core" type="password" style="flex:1"
+                  preference="extensions.metadata-mender.coreKey" />
+    </hbox>
+  </groupbox>
+
+  <groupbox>
+    <label><html:h2 data-l10n-id="mm-prefs-behavior-header">Behaviour</html:h2></label>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-priority" control="mm-priority"
+             value="Source priority:" />
+      <html:input id="mm-priority" style="flex:1"
+                  preference="extensions.metadata-mender.sourcePriority" />
+    </hbox>
+    <description class="mm-hint" data-l10n-id="mm-prefs-priority-hint">
+      Comma-separated, highest priority first. Default: pubmed,openalex,crossref,semanticscholar,openaire,unpaywall,core,cran
+    </description>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-mode" control="mm-mode"
+             value="Update mode:" />
+      <menulist id="mm-mode" preference="extensions.metadata-mender.overwriteMode">
+        <menupopup>
+          <menuitem label="Fill empty fields only" value="fill" />
+          <menuitem label="Overwrite existing fields" value="overwrite" />
+        </menupopup>
+      </menulist>
+    </hbox>
+
+    <hbox align="center">
+      <checkbox id="mm-initials"
+                data-l10n-id="mm-prefs-initials"
+                label="Abbreviate author first names to initials (PubMed style)"
+                preference="extensions.metadata-mender.initialsGivenNames" />
+    </hbox>
+
+    <hbox align="center">
+      <checkbox id="mm-titlefallback"
+                data-l10n-id="mm-prefs-title-fallback"
+                label="Look up DOI by title when no DOI/PMID present"
+                preference="extensions.metadata-mender.titleFallback" />
+    </hbox>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-tag-policy" control="mm-tag-policy"
+             value="Mended-tag policy:" />
+      <menulist id="mm-tag-policy" preference="extensions.metadata-mender.tagPolicy">
+        <menupopup>
+          <menuitem label="Latest run (replace previous date tag)" value="latest" />
+          <menuitem label="Full history (one tag per run date)" value="history" />
+          <menuitem label="Single stable tag (no date)" value="stable" />
+        </menupopup>
+      </menulist>
+    </hbox>
+
+    <hbox align="center">
+      <label class="mm-label" data-l10n-id="mm-prefs-concurrency" control="mm-concurrency"
+             value="Parallel items per batch:" />
+      <html:input id="mm-concurrency" type="number" min="1" max="12" step="1"
+                  style="width: 5em"
+                  preference="extensions.metadata-mender.concurrency" />
+    </hbox>
+  </groupbox>
+
+</vbox>

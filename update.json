@@ -1,0 +1,18 @@
+{
+  "addons": {
+    "metadata-mender@r-heller.github.io": {
+      "updates": [
+        {
+          "version": "0.6.0",
+          "update_link": "https://github.com/r-heller/metadata-mender/releases/download/v0.6.0/metadata-mender-0.6.0.xpi",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "6.999",
+              "strict_max_version": "9.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

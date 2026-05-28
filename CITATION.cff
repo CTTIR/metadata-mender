@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use Metadata Mender, please cite it using the metadata below."
+type: software
+title: "Metadata Mender: a Zotero plugin for reconciling item metadata against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE, Unpaywall, CORE, and CRAN"
+abstract: >-
+  Zotero 7 plugin that reconciles and completes item metadata by looking up
+  DOI, PMID, or CRAN package id against PubMed, OpenAlex, Crossref, Semantic
+  Scholar, OpenAIRE, Unpaywall, CORE, and CRAN; records citation count,
+  an OpenAlex-based impact-factor surrogate, and any open-access PDF link.
+authors:
+  - family-names: Heller
+    given-names: Raban
+version: 0.6.0
+date-released: 2026-05-28
+license: MIT
+repository-code: "https://github.com/r-heller/metadata-mender"
+url: "https://r-heller.github.io/metadata-mender/"
+keywords:
+  - zotero
+  - zotero-plugin
+  - bibliography
+  - metadata
+  - doi
+  - pubmed
+  - crossref
+  - openalex
+  - unpaywall

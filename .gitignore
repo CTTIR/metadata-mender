@@ -1,0 +1,28 @@
+# Build artefacts
+*.xpi
+metadata-mender-src.tar.gz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Quarto
+/docs/_site/
+/docs/.quarto/
+.quarto/
+
+# AI tooling artefacts (never commit)
+.claude/
+CLAUDE.md
+MEMORY.md
+.cowork/
+.remember/

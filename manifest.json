@@ -1,0 +1,19 @@
+{
+  "manifest_version": 2,
+  "name": "Metadata Mender",
+  "version": "0.6.0",
+  "description": "Reconcile and complete Zotero item metadata using DOI/PMID against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE (grey literature), Unpaywall, and CORE; resolves R packages via CRAN; records citation count, journal impact-factor surrogate, and open-access PDF link.",
+  "author": "Raban Heller",
+  "icons": {
+    "48": "content/icons/icon@48.png",
+    "96": "content/icons/icon@96.png"
+  },
+  "applications": {
+    "zotero": {
+      "id": "metadata-mender@r-heller.github.io",
+      "update_url": "https://r-heller.github.io/metadata-mender/update.json",
+      "strict_min_version": "6.999",
+      "strict_max_version": "9.*"
+    }
+  }
+}

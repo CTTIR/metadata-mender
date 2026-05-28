@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('manifest.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('update.json'))"
+      - name: Syntax check
+        run: |
+          node --check bootstrap.js
+          node --check content/metadata-mender.js
+      - name: Run tests
+        run: node --test tests/*.test.js
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build XPI
+        run: |
+          chmod +x build.sh
+          ./build.sh
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: metadata-mender-*.xpi

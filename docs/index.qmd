@@ -1,0 +1,136 @@
+---
+title: "Metadata Mender"
+subtitle: "Reconcile and complete Zotero metadata from PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE, Unpaywall, CORE, and CRAN"
+author: "Raban Heller"
+---
+
+## What it is
+
+**Metadata Mender** is a Zotero 7 plugin that takes the items you already
+have and *mends* them: it looks up each item's DOI, PMID, or CRAN package
+id against eight free databases and fills in the gaps — title, journal,
+volume/issue/pages, ISSN, authors, abstract, URL, publisher — while also
+recording the current citation count, an OpenAlex-based impact-factor
+surrogate, and the open-access PDF link when one exists.
+
+It is not a search tool. It assumes you already curate your library in
+Zotero and simply want the metadata to be *complete and correct*.
+
+## Install
+
+**Compatibility:** Zotero 7+ (declared `strict_min_version 6.999`,
+`strict_max_version 9.*`).
+
+1. Download the latest `metadata-mender-<version>.xpi` from the
+   [Releases page](https://github.com/r-heller/metadata-mender/releases).
+2. In Zotero open **Tools → Plugins**, click the gear icon, and choose
+   **Install Plugin From File…**.
+3. Select the `.xpi` and restart Zotero if prompted.
+
+![Installing the .xpi from Tools → Plugins.](images/install.png){fig-alt="Zotero plugin installer dialog" width=70%}
+
+## Set up your contact email
+
+Open **Zotero → Settings → Metadata Mender** and enter a contact email.
+This single field unlocks the polite-pool throughput at Crossref and is
+the required identifier for Unpaywall. Everything else (API keys for
+OpenAlex, NCBI, Semantic Scholar, CORE, Crossref Plus) is optional and
+only buys you more throughput.
+
+![Preferences pane with contact email and optional API keys.](images/preferences.png){fig-alt="Metadata Mender preferences pane" width=70%}
+
+## A typical run
+
+1. Select one or more regular items in your library (notes and
+   attachments are ignored).
+2. Right-click and choose **Mend metadata (DOI/PMID lookup)**.
+3. A progress popup ticks per item. Press **Esc** at any time to stop
+   after the current item.
+
+For each item the plugin:
+
+- Reads the DOI (from the DOI field or the `Extra` field) and PMID
+  (from `Extra`).
+- Queries the configured sources in priority order. The first source
+  with a non-empty value for a given field wins.
+- If neither a DOI nor a PMID is present, optionally falls back to a
+  Crossref title search and adopts the top match if its title is
+  similar enough (Jaccard ≥ 0.7 on tokenised words). Toggle this in
+  preferences.
+- Writes provenance, citation count, impact factor surrogate, and any
+  open-access PDF link back to `Extra`.
+- Tags changed items with `mended:YYYY-MM-DD` (or a stable `mended`
+  tag, per your tag policy).
+
+![Right-click context menu showing the “Mend metadata” action.](images/context-menu.png){fig-alt="Zotero right-click menu" width=60%}
+
+## What gets written
+
+Stable identifiers are appended once; temporal data (citations, impact
+factor, OA link) is rewritten on every run with today's date so the
+series stays comparable across runs.
+
+| Line | Behaviour | Source |
+|------|-----------|--------|
+| `PMID: <id>` | Append once | PubMed / Semantic Scholar |
+| `PMCID: PMC<id>` | Append once | OpenAlex / PubMed / Semantic Scholar |
+| `arXiv: <id>` | Append once | Semantic Scholar |
+| `OpenAlex: W<id>` | Append once | OpenAlex |
+| `Citations: <n> [<source>, YYYY-MM-DD]` | Rewritten every run | OpenAlex (preferred) → Crossref → Semantic Scholar |
+| `Impact Factor: <x.xx> [OpenAlex 2yr mean citedness, YYYY-MM-DD]` | Rewritten every run | OpenAlex venue lookup |
+| `OA-URL: <url>` | Rewritten every run | OpenAlex → Unpaywall → OpenAIRE → CORE |
+| `Provenance: YYYY-MM-DD — field:source, …` | Rewritten on any change | derived from the merges actually performed |
+
+## R packages
+
+To mend a software item that represents an R package, give it either:
+
+- a URL of the form `https://cran.r-project.org/package=ggplot2` in the
+  Zotero **URL** field, or
+- a line `CRAN: ggplot2` in **Extra**.
+
+The plugin queries METACRAN (`crandb.r-pkg.org`) and fills in the
+package title, abstract, version, date, language ("R"), publisher
+("CRAN"), authors (with `[role]` and ORCID annotations stripped), and
+URL, plus `License:`, `Upstream-URL:`, and `CRAN:` lines.
+
+## Reading the run summary
+
+```
+Done. N updated, N unchanged, N skipped, N not found, N errored.
+```
+
+- **updated** — at least one field or `Extra` line changed; a
+  `mended:YYYY-MM-DD` tag was added.
+- **unchanged** — sources answered but had nothing new.
+- **skipped** — item has no DOI/PMID and the title fallback is off or
+  did not produce a confident match.
+- **not found** — every source returned 404.
+- **errored** — every source threw (network, 5xx after retries, etc.).
+
+Per-item errors are surfaced inline (up to five) in the progress popup;
+full detail is always in **Help → Debug Output**.
+
+## Tips
+
+- Start with **Fill empty fields only** mode for your first run, then
+  spot-check before switching to **Overwrite existing fields**.
+- The "impact factor" is OpenAlex's 2-year mean citedness — a
+  transparent surrogate, not the Clarivate JIF. It tracks closely for
+  most journals but is not identical.
+- Author name parsing for PubMed's "Surname IN" form is heuristic;
+  spot-check authors after a bulk overwrite run.
+
+## Build from source
+
+```bash
+./build.sh
+```
+
+Produces `metadata-mender-<version>.xpi`. No toolchain required — the
+plugin is plain bootstrapped JS zipped into an XPI.
+
+## Cite
+
+See the [How to cite](https://github.com/r-heller/metadata-mender#how-to-cite)
+section of the README for a ready-to-copy BibTeX entry and APA citation.

@@ -1,0 +1,28 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Metadata Mender"
+  description: "A Zotero 7 plugin for reconciling item metadata against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE, Unpaywall, CORE, and CRAN."
+  repo-url: https://github.com/r-heller/metadata-mender
+  repo-actions: [issue]
+  navbar:
+    left:
+      - href: index.qmd
+        text: Guide
+    right:
+      - icon: github
+        href: https://github.com/r-heller/metadata-mender
+        aria-label: GitHub repository
+  page-footer:
+    center: "Metadata Mender · MIT License · © 2026 Raban Heller"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-copy: true
+    code-overflow: wrap
+    anchor-sections: true
