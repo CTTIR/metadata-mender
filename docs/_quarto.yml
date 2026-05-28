@@ -21,8 +21,8 @@ website:
 format:
   html:
     theme:
-      light: simplex
       dark: darkly
+      light: flatly
     toc: true
     toc-depth: 3
     code-copy: true
