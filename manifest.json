@@ -2,6 +2,7 @@
   "manifest_version": 2,
   "name": "Metadata Mender",
   "version": "0.6.0",
+  "license": "MIT",
   "description": "Reconcile and complete Zotero item metadata using DOI/PMID against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE (grey literature), Unpaywall, and CORE; resolves R packages via CRAN; records citation count, journal impact-factor surrogate, and open-access PDF link.",
   "author": "Raban Heller",
   "icons": {
