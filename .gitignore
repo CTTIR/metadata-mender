@@ -20,9 +20,8 @@ npm-debug.log*
 /docs/.quarto/
 .quarto/
 
-# AI tooling artefacts (never commit)
-.claude/
-CLAUDE.md
-MEMORY.md
-.cowork/
-.remember/
+*.tmp
+*.log
+*~
+*.bak
+*.orig
