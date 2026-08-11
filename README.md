@@ -2,6 +2,8 @@
 
 # Metadata Mender
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21889980.svg)](https://doi.org/10.5281/zenodo.21889980)
+
 A Zotero 9+ plugin that reconciles and completes item metadata by looking up the
 item's **DOI**, **PMID**, or **CRAN package id** against eight free databases —
 **PubMed (NCBI E-utilities)**, **OpenAlex**, **Crossref**, **Semantic Scholar**,
@@ -250,3 +252,11 @@ If Metadata Mender contributes to a publication, please cite it.
 ## License
 
 [MIT](LICENSE).
+
+## Citation
+
+If you use this software, please cite it as:
+
+> Heller, R. (2026). *Metadata Mender: Reconciling Zotero item metadata against public bibliographic services* (Version 0.1.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21889980
+
+DOI: [10.5281/zenodo.21889980](https://doi.org/10.5281/zenodo.21889980)
