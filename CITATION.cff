@@ -1,28 +1,26 @@
 cff-version: 1.2.0
-message: "If you use Metadata Mender, please cite it using the metadata below."
+message: If you use this software, please cite it as below.
 type: software
-title: "Metadata Mender: a Zotero plugin for reconciling item metadata against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE, Unpaywall, CORE, and CRAN"
-abstract: >-
-  Zotero 9+ plugin that reconciles and completes item metadata by looking up
-  DOI, PMID, or CRAN package id against PubMed, OpenAlex, Crossref, Semantic
-  Scholar, OpenAIRE, Unpaywall, CORE, and CRAN; records citation count,
-  an OpenAlex-based impact-factor surrogate, and any open-access PDF link.
+title: 'Metadata Mender: Reconciling Zotero item metadata against public bibliographic services'
+abstract: Zotero 9+ plugin that reconciles and completes item metadata by looking up DOI, PMID, or CRAN
+  package id against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE, Unpaywall, CORE, and CRAN;
+  records citation count, an OpenAlex-based impact-factor surrogate, and any open-access PDF link.
 authors:
-  - family-names: Heller
-    given-names: Raban
-    email: raban.heller@outlook.com
-version: 0.6.0
-date-released: 2026-05-28
+- family-names: Heller
+  given-names: Raban
+version: 0.1.0
+date-released: '2026-08-11'
 license: MIT
-repository-code: "https://github.com/CTTIR/metadata-mender"
-url: "https://cttir.github.io/metadata-mender/"
+repository-code: https://github.com/CTTIR/metadata-mender
+url: https://cttir.github.io/metadata-mender/
 keywords:
-  - zotero
-  - zotero-plugin
-  - bibliography
-  - metadata
-  - doi
-  - pubmed
-  - crossref
-  - openalex
-  - unpaywall
+- zotero
+- zotero-plugin
+- bibliography
+- metadata
+- doi
+- pubmed
+- crossref
+- openalex
+- unpaywall
+doi: 10.5281/zenodo.21889980

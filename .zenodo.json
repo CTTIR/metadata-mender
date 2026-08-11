@@ -1,0 +1,35 @@
+{
+  "upload_type": "software",
+  "title": "Metadata Mender: Reconciling Zotero item metadata against public bibliographic services",
+  "version": "0.1.0",
+  "publication_date": "2026-08-11",
+  "description": "<p>Metadata Mender is a plugin for the Zotero reference manager that completes and corrects bibliographic records by querying public services. Using a digital object identifier, PubMed identifier or CRAN package name, it looks entries up against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE, Unpaywall, CORE and CRAN, and fills in fields that are missing or inconsistent. It additionally records citation counts, an OpenAlex-derived indicator of journal impact, and any link to an openly accessible version of the document. It is aimed at researchers who want reference libraries that are accurate enough to cite from directly.</p>",
+  "creators": [
+    {
+      "name": "Heller, Raban"
+    }
+  ],
+  "contributors": [],
+  "license": "mit",
+  "access_right": "open",
+  "language": "eng",
+  "keywords": [
+    "zotero",
+    "zotero-plugin",
+    "reference-management",
+    "metadata",
+    "crossref",
+    "openalex",
+    "pubmed",
+    "open-access"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/CTTIR/metadata-mender",
+      "relation": "isSupplementTo",
+      "scheme": "url",
+      "resource_type": "software"
+    }
+  ],
+  "notes": "Prepared draft. Not yet published."
+}
