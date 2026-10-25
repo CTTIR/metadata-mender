@@ -1,4 +1,4 @@
-<img src="icon.svg" alt="Metadata Mender icon" width="96" align="right" />
+<img src="assets/branding/logo.png" alt="metadata-mender hex logo" width="120" height="139" align="right" />
 
 # Metadata Mender
 
@@ -209,8 +209,7 @@ forget to bump `update.json` to the same version.
   most journals but is not identical. Items not on a recognised venue
   (preprints, books, conference papers without indexed proceedings) will not
   get an impact-factor line.
-- The bundled icons in `content/icons/` are **placeholders** (solid colour
-  squares). Replace them before publishing.
+- The bundled icons in `content/icons/` use the CTTIR Material Atlas symbol.
 
 ## How to cite
 
@@ -278,3 +277,9 @@ must be reviewed and revised before inclusion, and references must be verified
 against their DOI, arXiv ID or ISBN.
 
 Local software setup: vLLM with Python/PyTorch, plus R and RStudio.
+
+## Branding
+
+The supplied CTTIR Material Atlas artwork and its editable R source are in
+[`tools/branding`](tools/branding/README.md). Use that renderer to reproduce
+the primary badge, alternate editions, and platform icons.

@@ -4,7 +4,7 @@ subtitle: "Reconcile and complete Zotero metadata from PubMed, OpenAlex, Crossre
 author: "Raban Heller"
 ---
 
-![](images/icon.svg){width=96px fig-alt="Metadata Mender icon — solid black square on white background"}
+![](images/icon.svg){height=139px fig-alt="metadata-mender hex logo"}
 
 ## What it is
 

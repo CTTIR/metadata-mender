@@ -3,6 +3,7 @@ project:
   output-dir: _site
 
 website:
+  favicon: images/icon-symbol.svg
   title: "Metadata Mender"
   description: "A Zotero 9+ plugin for reconciling item metadata against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE, Unpaywall, CORE, and CRAN."
   repo-url: https://github.com/CTTIR/metadata-mender
