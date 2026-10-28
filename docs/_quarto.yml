@@ -9,6 +9,8 @@ website:
   repo-url: https://github.com/CTTIR/metadata-mender
   repo-actions: [issue]
   navbar:
+    logo: images/icon.svg
+    logo-alt: "metadata-mender hex logo"
     left:
       - href: index.qmd
         text: Guide
@@ -24,6 +26,7 @@ format:
     theme:
       dark: darkly
       light: flatly
+    css: branding.css
     toc: true
     toc-depth: 3
     code-copy: true
