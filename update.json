@@ -3,12 +3,13 @@
     "metadata-mender@r-heller.github.io": {
       "updates": [
         {
-          "version": "0.6.0",
-          "update_link": "https://github.com/CTTIR/metadata-mender/releases/download/v0.6.0/metadata-mender-0.6.0.xpi",
+          "version": "0.6.1",
+          "update_link": "https://github.com/CTTIR/metadata-mender/releases/download/v0.6.1/metadata-mender-0.6.1.xpi",
+          "update_hash": "sha256:d443772fd8fd0ac17d1d9331b88c1279f96430b02567d89aff4a89c1cd5eee2b",
           "applications": {
             "zotero": {
-              "strict_min_version": "6.999",
-              "strict_max_version": "9.*"
+              "strict_min_version": "9.0",
+              "strict_max_version": "10.0.*"
             }
           }
         }

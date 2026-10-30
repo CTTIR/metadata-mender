@@ -11,6 +11,8 @@ Zotero.MetadataMender = {
   _sourceCache: {},
   _popupHandlers: [],
   _cancelRequested: false,
+  _running: false,
+  _processing: new Set(),
 
   PREFS: {
     openalexKey: "extensions.metadata-mender.openalexKey",
@@ -40,6 +42,7 @@ Zotero.MetadataMender = {
   },
 
   shutdown() {
+    this._cancelRequested = true;
     this.initialized = false;
   },
 
@@ -59,23 +62,14 @@ Zotero.MetadataMender = {
       this.PREFS.sourcePriority,
       "pubmed,openalex,crossref,semanticscholar,openaire,unpaywall,core,cran"
     );
-    setIfUnset(this.PREFS.overwriteMode, "overwrite");
-    setIfUnset(this.PREFS.initialsGivenNames, true);
-    setIfUnset(this.PREFS.titleFallback, true);
+    setIfUnset(this.PREFS.overwriteMode, "fill");
+    setIfUnset(this.PREFS.initialsGivenNames, false);
+    setIfUnset(this.PREFS.titleFallback, false);
     setIfUnset(this.PREFS.tagPolicy, "latest");
     setIfUnset(this.PREFS.concurrency, 4);
 
-    // One-time migration: earlier versions defaulted Update mode to "fill",
-    // which left pre-existing (sometimes wrong) field values like author names
-    // untouched. The intended behaviour is to refresh from the sources, so flip
-    // legacy "fill" installs to "overwrite" once. Still user-editable afterward.
-    const migratedKey = "extensions.metadata-mender.overwriteDefaultMigrated";
-    if (Zotero.Prefs.get(migratedKey, true) === undefined) {
-      if (Zotero.Prefs.get(this.PREFS.overwriteMode, true) === "fill") {
-        Zotero.Prefs.set(this.PREFS.overwriteMode, "overwrite", true);
-      }
-      Zotero.Prefs.set(migratedKey, true, true);
-    }
+    // Existing choices are preserved; an update must never enable overwrites.
+
   },
 
   getPref(key) {
@@ -105,7 +99,7 @@ Zotero.MetadataMender = {
         case "core":
           // CORE: ~10 tokens/minute unauthenticated (effectively unusable);
           // 10 tokens/minute on the free tier with a key. Stay well under.
-          return M.getPref(M.PREFS.coreKey) ? 5 : 1;
+          return 1 / 6;
         case "unpaywall":
           // Generous limits; stay polite.
           return 10;
@@ -143,28 +137,47 @@ Zotero.MetadataMender = {
   // HTTP helper — 2xx → body, 404 → null, 429/5xx → retry honouring Retry-After.
   // =========================================================================
   async _get(url, headers = {}, attempt = 1) {
-    const xhr = await Zotero.HTTP.request("GET", url, {
-      headers: Object.assign({ "User-Agent": this._userAgent() }, headers),
-      responseType: "json",
-      timeout: 30000,
-      errorOnStatus: false,
-    });
+    if (this._cancelRequested) throw new Error("Operation cancelled");
+    const host = /^https:\/\/([^/?#]+)(?:[/?#]|$)/i.exec(url);
+    const allowed = new Set(["api.openalex.org", "api.crossref.org", "eutils.ncbi.nlm.nih.gov",
+      "api.semanticscholar.org", "api.openaire.eu", "api.core.ac.uk", "api.unpaywall.org", "crandb.r-pkg.org"]);
+    if (!host || !allowed.has(host[1].toLowerCase())) throw new Error("Unapproved metadata endpoint");
+    let xhr;
+    try {
+      xhr = await Zotero.HTTP.request("GET", url, {
+        headers: Object.assign({ "User-Agent": this._userAgent() }, headers),
+        responseType: "json", timeout: 30000, successCodes: false,
+        errorDelayMax: 0, noRetryOnThrottle: true, anon: true,
+        followRedirects: false,
+      });
+    } catch (_) {
+      // Transport errors may include a URL/API key; never pass their text on.
+      throw new Error(`Metadata request failed (${host[1]})`);
+    }
+    if (this._cancelRequested) throw new Error("Operation cancelled");
     const status = xhr.status;
-    if (status >= 200 && status < 300) return xhr.response;
+    if (status >= 200 && status < 300) {
+      if (!xhr.response || typeof xhr.response !== "object" || Array.isArray(xhr.response)) {
+        throw new Error(`Invalid metadata response (${host[1]})`);
+      }
+      return xhr.response;
+    }
     if (status === 404) return null;
     if ((status === 429 || (status >= 500 && status < 600)) && attempt < 3) {
       const ra = xhr.getResponseHeader ? xhr.getResponseHeader("Retry-After") : null;
       const wait = this._parseRetryAfter(ra) ?? Math.pow(2, attempt) * 1000;
-      await Zotero.Promise.delay(wait);
-      return this._get(url, headers, attempt + 1);
+      if (wait <= 30000) {
+        await Zotero.Promise.delay(wait);
+        return this._get(url, headers, attempt + 1);
+      }
     }
-    throw new Error(`HTTP ${status} ${url}`);
+    throw new Error(`HTTP ${status} (${host[1]})`);
   },
 
   _parseRetryAfter(value) {
     if (!value) return null;
     const n = parseFloat(value);
-    if (!isNaN(n)) return Math.max(0, n * 1000);
+    if (Number.isFinite(n) && /^\s*\d+(?:\.\d+)?\s*$/.test(value)) return Math.max(0, n * 1000);
     const t = Date.parse(value);
     if (!isNaN(t)) return Math.max(0, t - Date.now());
     return null;
@@ -243,7 +256,8 @@ Zotero.MetadataMender = {
       new Set(
         String(s || "")
           .toLowerCase()
-          .replace(/[^\w\s]/g, " ")
+          .normalize("NFKD").replace(/\p{M}/gu, "")
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
           .split(/\s+/)
           .filter((t) => t.length > 2)
       );
@@ -264,13 +278,13 @@ Zotero.MetadataMender = {
     }
     const key = this.getPref(this.PREFS.openalexKey);
     let url = `https://api.openalex.org/sources/${encodeURIComponent(sid)}`;
-    if (key) url += "?api_key=" + encodeURIComponent(key);
+    const headers = key ? { Authorization: "Bearer " + key } : {};
     try {
-      const data = await this.RateLimiter.schedule("openalex", () => this._get(url));
+      const data = await this.RateLimiter.schedule("openalex", () => this._get(url, headers));
       this._sourceCache[sid] = data || null;
     } catch (e) {
       Zotero.debug("Metadata Mender: openalex venue lookup failed: " + e);
-      this._sourceCache[sid] = null;
+      return null;
     }
     return this._sourceCache[sid];
   },
@@ -283,7 +297,7 @@ Zotero.MetadataMender = {
     try { doi = item.getField("DOI"); } catch (e) { doi = ""; }
     if (doi) return this._normalizeDOI(doi);
     const extra = item.getField("extra") || "";
-    const m = extra.match(/^DOI:\s*(\S+)/im);
+    const m = extra.match(/^\s*DOI:[ \t]*(\S+)/im);
     if (m) return this._normalizeDOI(m[1]);
     return null;
   },
@@ -301,7 +315,7 @@ Zotero.MetadataMender = {
       if (v) return String(v).trim();
     } catch (e) { /* no native PMID field — read from Extra below */ }
     const extra = item.getField("extra") || "";
-    const m = extra.match(/^PMID:\s*(\d+)/im);
+    const m = extra.match(/^\s*PMID:[ \t]*(\d+)/im);
     return m ? m[1] : null;
   },
 
@@ -310,12 +324,37 @@ Zotero.MetadataMender = {
   _getCRAN(item) {
     try {
       const url = item.getField("url") || "";
-      const m = url.match(/cran\.r-project\.org\/(?:package=|web\/packages\/)([\w.]+)/i);
-      if (m) return m[1];
+      const m = url.match(/^https?:\/\/cran\.r-project\.org\/(?:package=([A-Za-z][A-Za-z0-9.]*)\/?|web\/packages\/([A-Za-z][A-Za-z0-9.]*)(?:\/(?:index\.html)?)?)(?:[?#].*)?$/i);
+      if (m) return m[1] || m[2];
     } catch (e) { /* item type lacks URL field — fine */ }
     const extra = item.getField("extra") || "";
-    const m = extra.match(/^CRAN:\s*([\w.]+)/im);
+    const m = extra.match(/^\s*CRAN:[ \t]*([A-Za-z][A-Za-z0-9.]*)[ \t]*$/im);
     return m ? m[1] : null;
+  },
+
+  _identifierProblem(item) {
+    const extra = item.getField("extra") || "";
+    for (const [field, normalize, valid] of [
+      ["DOI", value => this._canonicalDOI(value), /^10\.\d{4,9}\/\S+$/],
+      ["PMID", value => String(value).trim(), /^\d+$/],
+    ]) {
+      const values = [];
+      try { if (item.getField(field)) values.push(item.getField(field)); } catch (_) { /* unsupported native field */ }
+      for (const match of extra.matchAll(new RegExp("^\\s*" + field + ":[ \\t]*([^\\r\\n]+)$", "gim"))) {
+        if (match[1].trim()) values.push(match[1]);
+      }
+      const normalized = values.map(normalize);
+      if (normalized.some(value => !valid.test(value)) || new Set(normalized).size > 1) {
+        return `${field} identifiers are invalid or conflict; review before lookup`;
+      }
+    }
+    const packages = [...extra.matchAll(/^\s*CRAN:[ \t]*([^\r\n]+)$/gim)].map(match => match[1].trim());
+    const chosen = this._getCRAN(item);
+    if (chosen) packages.push(chosen);
+    if (packages.some(value => !/^[A-Za-z][A-Za-z0-9.]*$/.test(value)) || new Set(packages).size > 1) {
+      return "CRAN identifiers are invalid or conflict; review before lookup";
+    }
+    return null;
   },
 
   // =========================================================================
@@ -332,9 +371,9 @@ Zotero.MetadataMender = {
     } else {
       return null;
     }
-    if (key) url += (url.includes("?") ? "&" : "?") + "api_key=" + encodeURIComponent(key);
+    const headers = key ? { Authorization: "Bearer " + key } : {};
 
-    const data = await this.RateLimiter.schedule("openalex", () => this._get(url));
+    const data = await this.RateLimiter.schedule("openalex", () => this._get(url, headers));
     if (!data || data.error) return null;
 
     const rec = {
@@ -352,6 +391,8 @@ Zotero.MetadataMender = {
     if (data.language) rec.language = this._normalizeLang(data.language);
     if (typeof data.cited_by_count === "number") rec.citedByCount = data.cited_by_count;
     if (data.ids) {
+      const pmidMatch = String(data.ids.pmid || "").match(/(?:\/|^)(\d+)\/?$/);
+      if (pmidMatch) rec.PMID = pmidMatch[1];
       if (data.ids.pmcid) {
         const m = String(data.ids.pmcid).match(/PMC\d+/);
         if (m) rec.PMCID = m[0];
@@ -465,7 +506,7 @@ Zotero.MetadataMender = {
       issue: doc.issue,
       pages: doc.pages,
       date: doc.sortpubdate ? doc.sortpubdate.split(" ")[0].replace(/\//g, "-") : doc.pubdate,
-      PMID: id,
+      PMID: doc.uid ? String(doc.uid) : undefined,
     };
     if (Array.isArray(doc.articleids)) {
       const d = doc.articleids.find((x) => x.idtype === "doi");
@@ -665,7 +706,7 @@ Zotero.MetadataMender = {
     const data = await this.RateLimiter.schedule("unpaywall", () => this._get(url));
     if (!data || data.error) return null;
 
-    const rec = {};
+    const rec = { DOI: data.doi ? this._normalizeDOI(data.doi) : undefined };
     if (data.title) rec.title = data.title;
     if (data.year) rec.date = String(data.year);
     if (data.journal_name) rec.journal = data.journal_name;
@@ -694,6 +735,7 @@ Zotero.MetadataMender = {
 
     const rec = {
       title: data.Package,
+      CRAN: data.Package,
       publisher: "Comprehensive R Archive Network (CRAN)",
       url: `https://cran.r-project.org/package=${data.Package}`,
       programmingLanguage: "R",
@@ -755,38 +797,38 @@ Zotero.MetadataMender = {
     return creators;
   },
 
-  // Bibliographic search on Crossref to resolve a DOI from title (+ first
-  // author lastname). Conservative: requires Jaccard ≥ 0.7 on tokenised titles.
+  // Explicitly opted-in discovery needs concordant title, author, year, type
+  // and publication. Ambiguous matches are left for manual review.
   async _tryTitleFallback(item) {
-    let title;
-    try { title = item.getField("title"); } catch (e) { return null; }
-    if (!title || title.length < 12) return null;
-
-    let url =
-      `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(title)}&rows=3`;
-    try {
-      const creators = item.getCreators() || [];
-      if (creators.length) {
-        const first = creators[0];
-        const lastName = first.lastName || first.firstName;
-        if (lastName) url += `&query.author=${encodeURIComponent(lastName)}`;
-      }
-    } catch (e) { /* no creators — fine */ }
+    const title = item.getField("title", false, true) || "";
+    const year = (String(item.getField("date", false, true) || "").match(/\b(\d{4})\b/) || [])[1];
+    const authors = item.getCreators() || [];
+    const author = authors.find(c => c.creatorType === "author" || c.creatorTypeID === Zotero.CreatorTypes.getID("author"));
+    const journal = item.getField("publicationTitle", false, true) || "";
+    const types = { journalArticle: ["journal-article"], conferencePaper: ["proceedings-article"],
+      bookSection: ["book-chapter", "book-section"], preprint: ["posted-content"] };
+    const allowedTypes = types[Zotero.ItemTypes.getName(item.itemTypeID)];
+    if (title.length < 20 || !year || !author || !author.lastName || !journal || !allowedTypes) return null;
+    let url = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(title)}&rows=5`
+      + `&query.author=${encodeURIComponent(author.lastName)}`;
     const mailto = this.getPref(this.PREFS.crossrefMailto);
     if (mailto) url += `&mailto=${encodeURIComponent(mailto)}`;
-
     const data = await this.RateLimiter.schedule("crossref", () => this._get(url));
     const items = data && data.message && data.message.items;
     if (!Array.isArray(items)) return null;
-
-    for (const cand of items) {
-      const candTitle = Array.isArray(cand.title) && cand.title[0];
-      if (!candTitle) continue;
-      if (this._titleSimilar(title, candTitle) >= 0.7 && cand.DOI) {
-        return this._normalizeDOI(cand.DOI);
-      }
+    const matches = new Set();
+    for (const candidate of items) {
+      const candidateTitle = (candidate.title || [])[0] || "";
+      const years = ["published", "published-print", "published-online", "issued"]
+        .map(field => candidate[field] && candidate[field]["date-parts"] && candidate[field]["date-parts"][0][0]);
+      if (this._titleSimilar(title, candidateTitle) < 0.92 || !allowedTypes.includes(candidate.type)
+          || !years.some(value => Number.isInteger(value) && Math.abs(value - Number(year)) <= 1)
+          || !(candidate.author || []).some(value => this._nameKey(value.family || value.name) === this._nameKey(author.lastName))
+          || !(candidate["container-title"] || []).some(value => this._nameKey(value) === this._nameKey(journal))) continue;
+      const doi = this._canonicalDOI(candidate.DOI);
+      if (/^10\.\d{4,9}\/\S+$/.test(doi)) matches.add(doi);
     }
-    return null;
+    return matches.size === 1 ? [...matches][0] : null;
   },
 
   // ---- name helpers ----
@@ -811,10 +853,11 @@ Zotero.MetadataMender = {
   },
 
   // Reformat the item's author/creator given names to initials (pref-gated).
-  // Runs regardless of source or update mode so the result is consistent.
+  // Fill mode preserves creator names that were already present.
   _normalizeCreatorInitials(ctx) {
     const { item, changes } = ctx;
     if (!this.getPref(this.PREFS.initialsGivenNames)) return;
+    if (ctx.mode === "fill" && !changes.some(c => c.field === "creators")) return;
     const existing = item.getCreators();
     if (!existing.length) return;
     let changed = false;
@@ -835,8 +878,9 @@ Zotero.MetadataMender = {
     if (!full) return { firstName: "", lastName: "", creatorType: "author" };
     if (lastFirst) {
       const parts = full.trim().split(/\s+/);
-      const last = parts.shift() || "";
-      return { firstName: parts.join(" "), lastName: last, creatorType: "author" };
+      // PubMed summaries use "Surname Initials"; surnames can contain spaces.
+      const first = parts.length > 1 ? parts.pop() : "";
+      return { firstName: first, lastName: parts.join(" "), creatorType: "author" };
     }
     const parts = full.trim().split(/\s+/);
     const last = parts.pop() || "";
@@ -858,8 +902,7 @@ Zotero.MetadataMender = {
     "title", "date", "DOI", "journal", "volume", "issue",
     "pages", "ISSN", "abstractNote", "url", "publisher",
     "journalAbbreviation", "language",
-    // Software-relevant fields — silently no-op on item types that lack them
-    // (the try/catch around setField handles that).
+    // Software fields are checked against the current item type before writing.
     "versionNumber", "programmingLanguage",
   ],
 
@@ -873,6 +916,49 @@ Zotero.MetadataMender = {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+  },
+
+  _canonicalDOI(value) {
+    return typeof value === "string" ? this._normalizeDOI(value).toLowerCase() : "";
+  },
+
+  _nameKey(value) {
+    return String(value || "").normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  },
+
+  _validField(item, field) {
+    const id = Zotero.ItemFields.getID(field);
+    if (!id) return false;
+    const mapped = Zotero.ItemFields.getFieldIDFromTypeAndBase(item.itemTypeID, id) || id;
+    return Zotero.ItemFields.isValidForType(mapped, item.itemTypeID);
+  },
+
+  _snapshot(item) {
+    const fields = {};
+    for (const key of new Set([...this._mergeFields.map(k => this._zoteroFieldName(item, k)), "extra", "PMID", "PMCID", "arXiv"])) {
+      try { fields[key] = item.getField(key, false, true); } catch (_) { fields[key] = ""; }
+    }
+    return JSON.stringify({ fields, creators: item.getCreators(), tags: item.getTags(),
+      libraryID: item.libraryID, itemTypeID: item.itemTypeID, deleted: !!item.deleted });
+  },
+
+  _writeProblem(item) {
+    if (!item || !item.isRegularItem() || item.deleted) return "item is missing, trashed, or not a reference";
+    const library = Zotero.Libraries.get(item.libraryID);
+    if (!library || !library.editable) return "library is read-only";
+    if (item.hasChanged()) return "item has pending edits";
+    if (this._cancelRequested) return "operation cancelled";
+    return null;
+  },
+
+  _checkIdentity(ids, record, source) {
+    if (source === "cran") {
+      return ids.cran && record.CRAN === ids.cran ? null : "CRAN package identity differs";
+    }
+    if (ids.doi && this._canonicalDOI(record.DOI) !== this._canonicalDOI(ids.doi)) return "DOI identity missing or differs";
+    if (ids.pmid && record.PMID && String(record.PMID) !== String(ids.pmid)) return "PMID identity differs";
+    if (!ids.doi && ids.pmid && String(record.PMID || "") !== String(ids.pmid)) return "PMID identity missing or differs";
+    return null;
   },
 
   async _fetchAllSources(ids, priority) {
@@ -890,7 +976,11 @@ Zotero.MetadataMender = {
         else if (src === "core") rec = await this.fetchCORE({ doi });
         else if (src === "unpaywall") rec = await this.fetchUnpaywall({ doi });
         else if (src === "cran") rec = await this.fetchCRAN({ cran });
-        if (rec) records[src] = rec;
+        if (rec) {
+          const mismatch = this._checkIdentity(ids, rec, src);
+          if (mismatch) throw new Error(mismatch);
+          records[src] = rec;
+        }
       } catch (e) {
         errors[src] = String((e && e.message) || e);
         Zotero.debug("Metadata Mender: " + src + " error: " + e);
@@ -925,9 +1015,7 @@ Zotero.MetadataMender = {
 
       const fieldName = this._zoteroFieldName(item, key);
       let current;
-      try {
-        current = item.getField(fieldName);
-      } catch (e) {
+      if (!this._validField(item, fieldName)) {
         // Field not applicable to this item type. For a few keys, fall back
         // to writing the value into Extra so it isn't lost.
         if (key === "DOI") {
@@ -937,20 +1025,15 @@ Zotero.MetadataMender = {
         }
         continue;
       }
+      current = item.getField(fieldName, false, true);
       if (mode === "fill" && current) continue;
       if (current === String(chosen)) continue;
 
-      try {
-        item.setField(fieldName, chosen);
-        changes.push({ field: fieldName, from: current, to: chosen, source: chosenSrc });
-        provenance[fieldName] = chosenSrc;
-      } catch (e) {
-        if (key === "DOI") {
-          extraInjects.push({ key: "DOI", value: chosen, source: chosenSrc });
-        } else if (key === "versionNumber") {
-          extraInjects.push({ key: "Version", value: chosen, source: chosenSrc });
-        }
-      }
+      // Schema support was checked above. Any unexpected mutation failure must
+      // reach the rollback path, rather than silently saving a partial result.
+      item.setField(fieldName, chosen);
+      changes.push({ field: fieldName, from: current, to: chosen, source: chosenSrc });
+      provenance[fieldName] = chosenSrc;
     }
   },
 
@@ -969,19 +1052,22 @@ Zotero.MetadataMender = {
     const existing = item.getCreators();
     if (mode !== "overwrite" && existing.length) return;
 
-    item.setCreators(
-      creators.map((c) => ({
-        firstName: c.firstName,
-        lastName: c.lastName,
-        creatorTypeID: Zotero.CreatorTypes.getID(c.creatorType || "author"),
-      }))
-    );
+    const next = creators.map((c) => ({
+      firstName: c.firstName || "",
+      lastName: c.lastName || "",
+      fieldMode: c.fieldMode || 0,
+      creatorTypeID: Zotero.CreatorTypes.getID(c.creatorType || "author"),
+    }));
+    const comparable = list => list.map(c => ({ firstName: c.firstName || "", lastName: c.lastName || "",
+      fieldMode: c.fieldMode || 0, creatorTypeID: c.creatorTypeID || Zotero.CreatorTypes.getID(c.creatorType || "author") }));
+    if (JSON.stringify(comparable(existing)) === JSON.stringify(comparable(next))) return;
+    item.setCreators(next);
     changes.push({ field: "creators", count: creators.length, source: creatorSrc });
     provenance.creators = creatorSrc;
   },
 
   _augmentExtra(ctx) {
-    const { item, records, priority, today, changes, provenance, extraInjects, pmid, cran } = ctx;
+    const { item, records, priority, today, changes, provenance, extraInjects, pmid, cran, mode } = ctx;
     const oaRec = records.openalex;
     let extra = item.getField("extra") || "";
     const origExtra = extra;
@@ -1015,12 +1101,11 @@ Zotero.MetadataMender = {
     ];
     for (const id of identifiers) {
       if (!id.value) continue;
-      // Probe whether the field exists for this item type. getField throws on an
-      // unknown field, so a clean read means a native field is available.
-      let isNative = false, current = "";
-      if (id.field) {
-        try { current = item.getField(id.field); isNative = true; } catch (e) { isNative = false; }
-      }
+      const isNative = !!id.field && this._validField(item, id.field);
+      const current = isNative ? item.getField(id.field) : "";
+      const extraMatch = extra.match(new RegExp("^\\s*" + id.extraKey + "\\s*:\\s*(.+)$", "im"));
+      if (mode === "fill" && ((current && String(current) !== String(id.value))
+          || (extraMatch && extraMatch[1].trim() !== String(id.value)))) continue;
       if (isNative) {
         if (String(current) !== String(id.value)) {
           item.setField(id.field, id.value);
@@ -1075,11 +1160,11 @@ Zotero.MetadataMender = {
     if (oaRec && typeof oaRec.impactFactor2yr === "number") {
       const v = oaRec.impactFactor2yr.toFixed(2);
       const line = `${v} [OpenAlex 2yr mean citedness, ${today}]`;
-      const next = this._upsertExtraLine(extra, "Impact Factor", line);
+      const next = this._upsertExtraLine(extra, "OpenAlex 2yr mean citedness", line);
       if (next !== extra) {
         extra = next;
-        changes.push({ field: "extra", to: "Impact Factor: " + line, source: "openalex" });
-        provenance.impactFactor = "openalex";
+        changes.push({ field: "extra", to: "OpenAlex 2yr mean citedness: " + line, source: "openalex" });
+        provenance.meanCitedness = "openalex";
       }
     }
 
@@ -1151,7 +1236,7 @@ Zotero.MetadataMender = {
       if (policy === "latest") {
         const existing = item.getTags() || [];
         for (const t of existing) {
-          if (t.tag === "mended" || /^mended:/.test(t.tag)) {
+          if (t.type === 1 && (t.tag === "mended" || /^mended:\d{4}-\d{2}-\d{2}$/.test(t.tag))) {
             item.removeTag(t.tag);
           }
         }
@@ -1163,6 +1248,20 @@ Zotero.MetadataMender = {
   },
 
   async reconcileItem(item) {
+    const problem = this._writeProblem(item);
+    if (problem) return { item, status: "skipped", reason: problem };
+    if (this._processing.has(item)) return { item, status: "skipped", reason: "item is already being processed" };
+    this._processing.add(item);
+    try {
+      return await this._reconcilePrepared(item, this._snapshot(item));
+    } finally {
+      this._processing.delete(item);
+    }
+  },
+
+  async _reconcilePrepared(item, before) {
+    const identifierProblem = this._identifierProblem(item);
+    if (identifierProblem) return { item, status: "skipped", reason: identifierProblem };
     let doi = this._getDOI(item);
     const pmid = this._getPMID(item);
     const cran = this._getCRAN(item);
@@ -1176,7 +1275,7 @@ Zotero.MetadataMender = {
           doiViaTitle = true;
         }
       } catch (e) {
-        Zotero.debug("Metadata Mender: title fallback failed: " + e);
+        return { item, status: "error", reason: "title lookup failed", errors: { crossref: e.message } };
       }
     }
 
@@ -1184,12 +1283,27 @@ Zotero.MetadataMender = {
       return { item, status: "skipped", reason: "no DOI, PMID, or CRAN id" };
     }
 
-    const priority = this._getSourcePriority();
+    const priority = this._getSourcePriority().filter(source => !cran || source === "cran");
     const { records, errors } = await this._fetchAllSources({ doi, pmid, cran }, priority);
+
+    // A correct identifier can still be attached to the wrong local reference.
+    // Conflicting title/authorship is a review outcome, not authority to overwrite.
+    const currentTitle = item.getField("title", false, true) || "";
+    const currentAuthor = (item.getCreators() || []).find(c => c.creatorType === "author"
+      || c.creatorTypeID === Zotero.CreatorTypes.getID("author"));
+    for (const [source, record] of Object.entries(records)) {
+      if (source === "cran") continue;
+      if ((currentTitle && record.title && this._titleSimilar(currentTitle, record.title) < 0.8)
+          || (currentAuthor && currentAuthor.lastName && record.creators && record.creators.length
+            && !record.creators.some(c => this._nameKey(c.lastName) === this._nameKey(currentAuthor.lastName)))) {
+        errors[source] = "Metadata conflicts with the current reference; review its identifiers";
+        delete records[source];
+      }
+    }
 
     if (!Object.keys(records).length) {
       if (Object.keys(errors).length) {
-        return { item, status: "error", reason: "all sources errored", errors };
+        return { item, status: "error", reason: "no verified source metadata; lookup or identity checks failed", errors };
       }
       return { item, status: "notfound", reason: "no source had a record" };
     }
@@ -1213,20 +1327,48 @@ Zotero.MetadataMender = {
       ctx.provenance["DOI-via-title"] = "crossref-search";
     }
 
-    this._mergeStandardFields(ctx);
-    this._mergeCreators(ctx);
-    this._normalizeCreatorInitials(ctx);
-    this._augmentExtra(ctx);
-
-    if (ctx.changes.length) {
-      this._applyTag(item, ctx.today);
-      await item.saveTx();
-      return { item, status: "updated", changes: ctx.changes, sources: Object.keys(records) };
+    const problem = this._writeProblem(item);
+    if (problem || this._snapshot(item) !== before) {
+      return { item, status: "skipped", reason: problem || "item changed during lookup; retry after review" };
     }
-    return { item, status: "unchanged", sources: Object.keys(records) };
+    try {
+      this._mergeStandardFields(ctx);
+      this._mergeCreators(ctx);
+      this._normalizeCreatorInitials(ctx);
+      this._augmentExtra(ctx);
+      if (ctx.changes.length) {
+        this._applyTag(item, ctx.today);
+        if (this._cancelRequested) throw new Error("Operation cancelled before save");
+        await item.saveTx();
+        return { item, status: "updated", changes: ctx.changes, sources: Object.keys(records), errors };
+      }
+      return { item, status: "unchanged", sources: Object.keys(records), errors };
+    } catch (_) {
+      // Discard only this operation's staged changes; pending edits were refused
+      // before lookup and the complete snapshot was checked immediately above.
+      try {
+        await item.reload(["primaryData", "itemData", "creators", "tags"], true);
+      } catch (_) {
+        throw new Error("Metadata save failed and item reload failed; reopen Zotero before continuing");
+      }
+      throw new Error("Metadata changes were not saved; the original item was reloaded");
+    }
   },
 
   async reconcileSelected(window) {
+    if (this._running) {
+      Zotero.alert(window, "Metadata Mender", "A metadata run is already active. Wait or cancel it first.");
+      return;
+    }
+    this._running = true;
+    try {
+      return await this._reconcileSelectedBatch(window);
+    } finally {
+      this._running = false;
+    }
+  },
+
+  async _reconcileSelectedBatch(window) {
     const ZP = window.ZoteroPane;
     const items = ZP.getSelectedItems().filter((it) => it.isRegularItem());
     if (!items.length) {
@@ -1283,6 +1425,9 @@ Zotero.MetadataMender = {
             errored++;
             failures.push({ item, errors: res.errors || {}, reason: res.reason });
           } else unchanged++;
+          if (res.status !== "error" && res.errors && Object.keys(res.errors).length) {
+            failures.push({ item, errors: res.errors, reason: "some sources could not be verified" });
+          }
         } catch (e) {
           errored++;
           failures.push({ item, errors: { unexpected: String(e) }, reason: "exception" });

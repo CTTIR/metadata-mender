@@ -4,13 +4,13 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21889980.svg)](https://doi.org/10.5281/zenodo.21889980)
 
-A Zotero 9+ plugin that reconciles and completes item metadata by looking up the
+A Zotero 9–10.0 plugin that reconciles and completes item metadata by looking up the
 item's **DOI**, **PMID**, or **CRAN package id** against eight free databases —
 **PubMed (NCBI E-utilities)**, **OpenAlex**, **Crossref**, **Semantic Scholar**,
 **OpenAIRE** (grey literature), **Unpaywall**, **CORE**, and **CRAN** (R
 packages, via METACRAN) — and merges the results back onto the item. It also
-records the current **citation count** and a **journal impact-factor
-surrogate** with a date stamp, and surfaces the **Open Access PDF link** when
+records the current **citation count** and **OpenAlex 2-year mean
+citedness** with a date stamp, and surfaces the **Open Access PDF link** when
 available.
 
 ## What it does
@@ -22,21 +22,22 @@ available.
   title, date, journal/publication title, volume, issue, pages, ISSN,
   abstract, URL, publisher, and authors.
 - If the item has neither a DOI nor a PMID, the plugin can optionally fall
-  back to a Crossref bibliographic search by title (+ first author) and adopt
-  the top match when its title is similar enough (Jaccard ≥ 0.7 on tokenised
-  words). Controlled by a setting; default on.
+  back to a Crossref bibliographic search. This is **off by default**. Adoption
+  requires one distinct DOI among candidates with a near-identical title
+  (Jaccard ≥ 0.92), matching first-author surname, publication title and item
+  type, and publication year within one year. Missing evidence means no match.
 - Items are processed in parallel (configurable, default 4 workers). Per-source
   rate limits are still respected, so a batch only goes faster where one source
   is idle while another is waiting.
 - A progress popup ticks per item and can be cancelled with **Esc**.
 - Items that get changes are tagged according to the configured tag policy:
   - *Latest run* (default) — single `mended:YYYY-MM-DD` tag, replacing any
-    previous date tag on that item.
+    previous automatic date tag on that item. Manual tags are preserved.
   - *Full history* — accumulates one `mended:YYYY-MM-DD` tag per run date.
   - *Stable* — a single `mended` tag without a date.
 - Per-item errors (after retries) are shown inline in the progress popup —
   up to five with their failure reasons, plus a "…and N more" line when
-  truncated. Full details always go to **Help → Debug Output**.
+  truncated. Sanitized failure details go to **Help → Debug Output**.
 
 ### Extra-field lines written
 
@@ -50,7 +51,7 @@ appended once; temporal data is rewritten on every run with today's date.
 | `arXiv: <id>`      | Append once | Semantic Scholar |
 | `OpenAlex: W<id>`  | Append once | OpenAlex |
 | `Citations: <n> [<source>, YYYY-MM-DD]` | Rewritten every run | OpenAlex preferred; falls back to Crossref or Semantic Scholar |
-| `Impact Factor: <x.xx> [OpenAlex 2yr mean citedness, YYYY-MM-DD]` | Rewritten every run | OpenAlex venue lookup |
+| `OpenAlex 2yr mean citedness: <x.xx> [OpenAlex 2yr mean citedness, YYYY-MM-DD]` | Rewritten every run | OpenAlex venue lookup |
 | `OA-URL: <url>`    | Rewritten every run | Cascade — OpenAlex → Unpaywall → OpenAIRE → CORE |
 | `Provenance: YYYY-MM-DD — field:source, …` | Rewritten on any change | derived from the actual merges performed |
 
@@ -80,12 +81,15 @@ Default order: `pubmed,openalex,crossref,semanticscholar,openaire,unpaywall,core
 The first source with a non-empty value for a given field wins. PubMed and
 OpenAlex are queried first because they have the highest signal for the
 biomedical items most users curate; the others fill gaps. Citation count is
-pinned to OpenAlex regardless of priority (with a fallback). Impact factor
-always comes from OpenAlex (only it exposes per-venue `2yr_mean_citedness`).
+pinned to OpenAlex regardless of priority (with a fallback). The separately
+labelled 2-year mean citedness comes from OpenAlex; it is not a journal impact
+factor. Existing manual or legacy `Impact Factor:` lines are preserved.
 
 The plugin adapts its request pacing automatically based on which keys are
 present. On HTTP **429** or **5xx** it retries up to twice, honouring
-`Retry-After`. **404** is treated as "no record" rather than an error.
+`Retry-After` up to 30 seconds per retry. Longer server delays stop that lookup.
+Each request times out after 30 seconds; redirects are refused. **404** means
+"no record". Exact returned identifiers are checked before any merge.
 
 Where to get keys:
 
@@ -122,19 +126,21 @@ If your item type isn't `computerProgram`, the version is stashed as a
   query, and as the required identifier for Unpaywall. Setting it also enables
   the Unpaywall source.
 - **Source priority** — comma-separated, highest first. Default
-  `crossref,pubmed,semanticscholar,openalex`. The first source that supplies a
-  given field wins. Citation count and impact factor are special: see above.
+  `pubmed,openalex,crossref,semanticscholar,openaire,unpaywall,core,cran`. The first
+  verified source that supplies a field wins. Citation metrics are special: see above.
 - **Update mode**
   - *Fill empty fields only* (default) — never touches standard fields you
     already have.
   - *Overwrite existing fields* — replaces existing values with the
     highest-priority source's value.
-- **Look up DOI by title when item has no DOI/PMID** — default on. Disable if
-  you'd rather skip such items than risk an incorrect match.
+- **Look up DOI by title when item has no DOI/PMID** — off by default. Enable
+  only for records with an author, year, publication title and supported type.
+- **Abbreviate author first names to initials** — off by default. Fill mode
+  preserves existing creator names even when this option is enabled.
 - **Mended-tag policy** — *latest* / *history* / *stable* (see above).
 - **Parallel items per batch** — 1 to 12, default 4. Higher is only helpful
   when you have keys that raise the per-source RPS budgets.
-- Citation count, impact factor, OA URL, and provenance are written on every
+- Citation count, mean citedness, OA URL, and provenance are updated on each
   run regardless of update mode (they are time-stamped readings, not stable
   bibliographic metadata).
 - For item types that don't expose a Zotero `DOI` field (books, theses, …) a
@@ -150,16 +156,24 @@ After each batch the progress popup reports:
 - **updated** — at least one field or Extra line changed (and a
   `mended:YYYY-MM-DD` tag was added).
 - **unchanged** — sources answered but had nothing new to add.
-- **skipped** — item has no DOI/PMID, so nothing to look up.
+- **skipped** — no usable identifier, a protected or edited item, or cancellation.
 - **not found** — every queried source returned 404 (work not indexed).
-- **errored** — every queried source threw (network, 5xx after retries, etc.).
+- **errored** — no verified metadata was available, identity checks failed, or a
+  save failed. Partial source failures also appear even when another source updated the item.
 
-Press **Esc** during a batch to stop after the current item; the summary then
-reads "Cancelled. …" with whatever was accumulated so far.
+Press **Esc** to cancel pending work. A response arriving after cancellation
+will not be applied; a save already underway may finish. The summary reads
+"Cancelled. …" with whatever was accumulated so far.
+
+Read-only libraries, trashed items, and items with pending edits are skipped.
+If an item changes while metadata is fetched, it is skipped for review. Failed
+saves reload the original stored state. Existing saved settings are preserved
+on upgrade: check **Update mode** if an earlier version enabled overwrite.
 
 ## Install
 
-**Compatibility:** Zotero 9 and later.
+**Declared compatibility:** Zotero 9.0 through 10.0.x. See the
+[qualification record](docs/AUDIT-2026-10-30.md) for tested behavior and limits.
 
 1. Download `metadata-mender-<version>.xpi` from the
    [Releases page](https://github.com/CTTIR/metadata-mender/releases).
@@ -168,27 +182,36 @@ reads "Cancelled. …" with whatever was accumulated so far.
 
 ## Documentation
 
-Full walkthrough and screenshots: <https://cttir.github.io/metadata-mender/>.
+Published guide: <https://cttir.github.io/metadata-mender/>. The local
+`docs/index.qmd` includes the current candidate changes until the site is published.
 
 ## Build from source
 
+Prerequisites: Python 3.9 or later for packaging; Node.js 22 or later for tests.
+No dependency installation is needed. From the repository root:
+
 ```bash
+node --test tests/*.test.js*.test.js
 ./build.sh
+python3 tools/build.py --check metadata-mender-0.6.1.xpi
 ```
 
-Produces `metadata-mender-<version>.xpi`. No build toolchain required — it is
-plain bootstrapped JS zipped into an XPI.
+Produces the current XPI deterministically and verifies its runtime files against
+source. Earlier version artifacts remain in place. Install this local XPI using
+the steps above, then first try one disposable reference in a separate library
+with **Fill empty fields only** selected.
 
 ## Tests
 
 ```bash
-node --test tests/
+node --test tests/*.test.js
 ```
 
-The pure helpers (`_normalizeDOI`, `_splitName`, `_reconstructAbstract`,
-`_upsertExtraLine`, `_appendExtraLineIfMissing`, `_parseRetryAfter`, `_today`)
-are exercised in a VM context with a minimal Zotero stub — no Zotero install
-needed. The same suite runs on every push via `.github/workflows/ci.yml`.
+Tests exercise reconciliation, identity mismatches, stale and protected items,
+cancellation, save rollback, credential-safe errors, Extra preservation, strict
+title matching, helpers, and reproducible packaging. They use a VM with a Zotero
+data-model stub, so they do not establish desktop UI compatibility. CI runs the
+same checks and verifies the XPI; see the audit record for observed local results.
 
 ## Release
 
@@ -199,16 +222,26 @@ forget to bump `update.json` to the same version.
 ## Notes & limitations
 
 - Only regular items (not notes/attachments) are processed.
-- Items with neither a DOI nor a PMID are skipped.
+- Items need a DOI, PMID, explicit CRAN package id, or an opted-in verified title match.
+- Metadata lookups send the selected identifiers to configured services. Optional
+  title search sends the title and first author to Crossref; email and keys are
+  sent to their providers. Credentials remain in Zotero preferences.
+- Zotero's own HTTP debug output may include lookup identifiers, titles, and
+  contact email. Review logs before sharing them. Plugin error messages redact
+  request URLs and credential values.
+- An identifier match does not prove the local reference is correct: conflicting
+  titles or authors are refused. Review source metadata before enabling overwrite.
+- Conflicting native/Extra identifiers and malformed identifiers are skipped for
+  review before any lookup. CRAN URL detection requires the actual CRAN host.
+- Run Mender before a Zotero Library Workbench extraction/audit. Close Zotero for
+  Workbench operations and regenerate correction plans after library changes.
+  Do not run competing metadata writers at the same time.
 - OpenAlex abstracts are reconstructed from its inverted-index format; Crossref
   abstracts are stripped of JATS XML tags.
 - Author name parsing is heuristic (especially for PubMed's "Surname IN" form);
   spot-check author fields after a bulk run in *overwrite* mode.
-- The "impact factor" is OpenAlex's 2-year mean citedness — a transparent
-  surrogate computed by OpenAlex, not the Clarivate JIF. It tracks closely for
-  most journals but is not identical. Items not on a recognised venue
-  (preprints, books, conference papers without indexed proceedings) will not
-  get an impact-factor line.
+- OpenAlex 2-year mean citedness is a distinct metric, not the Clarivate JIF.
+  Items without an indexed venue do not receive this line.
 - The bundled icons in `content/icons/` use the CTTIR Coder Edition v5 symbol.
 
 ## How to cite
@@ -224,7 +257,7 @@ If Metadata Mender contributes to a publication, please cite it.
              metadata against PubMed, OpenAlex, Crossref, Semantic
              Scholar, OpenAIRE, Unpaywall, CORE, and CRAN},
   year    = {2026},
-  version = {0.6.0},
+  version = {0.6.1},
   url     = {https://github.com/CTTIR/metadata-mender},
   license = {MIT}
 }
@@ -234,13 +267,11 @@ If Metadata Mender contributes to a publication, please cite it.
 
 > Heller, R. (2026). *Metadata Mender: a Zotero plugin for reconciling item
 > metadata against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE,
-> Unpaywall, CORE, and CRAN* (Version 0.6.0) [Computer software].
+> Unpaywall, CORE, and CRAN* (Version 0.6.1) [Computer software].
 > https://github.com/CTTIR/metadata-mender
 
-> **DOI:** none yet. To mint one, archive a tagged release on
-> [Zenodo](https://zenodo.org/account/settings/github/) (enable the repo,
-> push a `vX.Y.Z` tag, accept the auto-deposit). Then add `doi = {…}` to
-> the BibTeX entry above and a `doi:` field to `CITATION.cff`.
+The archived 0.1.0 release has the DOI shown below. Do not treat that
+version-specific archive as a deposit of the local 0.6.1 candidate.
 
 ## Links
 
@@ -252,9 +283,9 @@ If Metadata Mender contributes to a publication, please cite it.
 
 [MIT](LICENSE).
 
-## Citation
+## Archived citation
 
-If you use this software, please cite it as:
+The existing archived release is:
 
 > Heller, R. (2026). *Metadata Mender: Reconciling Zotero item metadata against public bibliographic services* (Version 0.1.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.21889980
 
