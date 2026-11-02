@@ -18,7 +18,7 @@ run_branding <- function() {
 
   required <- c("packages.csv", "design_tokens.csv", file.path("R", c(
     "cttir_hex.R", "tokens.R", "accessibility.R", "palette.R",
-    "primitives.R", "motifs.R"
+    "primitives.R", "motifs.R", "square.R"
   )))
   if (!all(file.exists(file.path(branding, required)))) {
     stop("The branding source bundle is incomplete.")
@@ -124,14 +124,37 @@ run_branding <- function() {
     }
   }
 
+  # Software that is not an R package uses the square v5 logo in the apps
+  # family, drawn here; hex = artwork-only square, lockup = named square.
+  square_families <- "apps"
+  if (any(registry$family %in% square_families) && !cttir_square_installed()) {
+    stop("Install JetBrains Mono ExtraBold to render square logos.")
+  }
+  draw_square <- function(name, family, mode, layout, directory) {
+    stem <- paste0(layout, if (mode == "light") "" else paste0("-", mode))
+    draw <- function() cttir_square_draw(name, family, mode, layout)
+    cttir_device(function() grDevices::svg(file.path(directory, paste0(stem, ".svg")),
+      width = 6, height = 6, bg = "transparent"), draw)
+    cttir_device(function() grDevices::png(file.path(directory, paste0(stem, ".png")),
+      width = 1600L, height = 1600L, res = 1600 / 6, bg = "transparent",
+      type = "cairo", antialias = "gray"), draw)
+    cttir_device(function() grDevices::cairo_pdf(file.path(directory, paste0(stem, ".pdf")),
+      width = 6, height = 6, bg = "transparent"), draw)
+  }
+
   for (i in seq_len(nrow(registry))) {
     name <- registry$name[i]
     family <- registry$family[i]
+    square <- family %in% square_families
     directory <- file.path(output, if (name == "CTTIR") "CTTIR-brand" else name)
     # Approved masters preserve the supplied v5 name outlines exactly.
     dir.create(directory, recursive = TRUE, showWarnings = FALSE)
     for (layout in c("hex", "lockup")) {
       for (mode in c("light", "dark", "mono")) {
+        if (square) {
+          draw_square(name, family, mode, layout, directory)
+          next
+        }
         for (format in c("svg", "png", "pdf")) {
           master <- hexmakR::hex_asset(name, mode, layout, format)
           if (!file.copy(master, file.path(directory, basename(master)),
@@ -139,22 +162,29 @@ run_branding <- function() {
         }
       }
     }
-    for (size in c(32L, 48L, 64L, 128L, 256L)) {
+    drawn <- c(16L, 96L, 180L, 192L, 512L)
+    if (square) {
+      drawn <- sort(c(drawn, 32L, 48L, 64L, 128L, 256L))
+    } else for (size in c(32L, 48L, 64L, 128L, 256L)) {
       master <- hexmakR::hex_asset(name, layout = "icon", format = "png",
                                   size = size)
       if (!file.copy(master, file.path(directory, basename(master)),
                      overwrite = TRUE)) stop("Could not copy v5 icon.")
     }
-    for (px in c(16L, 96L, 180L, 192L, 512L)) {
+    for (px in drawn) {
       cttir_device(function() grDevices::png(
         file.path(directory, paste0("icon-", px, ".png")),
         width = px, height = px, res = px / 6, bg = "transparent",
         type = "cairo", antialias = "gray"
       ), function() {
         grid::grid.newpage()
-        grid::pushViewport(grid::viewport(width = sqrt(3) / 2, height = 1))
-        cttir_draw(name, family, mode = "dark", layout = "hex", small = TRUE, newpage = FALSE)
-        grid::popViewport()
+        if (square) {
+          cttir_square_draw(name, family, "dark", "hex", small = px <= 64, newpage = FALSE)
+        } else {
+          grid::pushViewport(grid::viewport(width = sqrt(3) / 2, height = 1))
+          cttir_draw(name, family, mode = "dark", layout = "hex", small = TRUE, newpage = FALSE)
+          grid::popViewport()
+        }
       })
     }
     # The complete mark fits within the central maskable safe circle.
@@ -164,8 +194,13 @@ run_branding <- function() {
       type = "cairo", antialias = "gray"
     ), function() {
       grid::grid.newpage()
-      grid::pushViewport(grid::viewport(width = 0.72 * sqrt(3) / 2, height = 0.72))
-      cttir_draw(name, family, mode = "dark", layout = "hex", small = TRUE, newpage = FALSE)
+      grid::pushViewport(grid::viewport(width = 0.72 * if (square) 1 else sqrt(3) / 2,
+                                        height = 0.72))
+      if (square) {
+        cttir_square_draw(name, family, "dark", "hex", small = TRUE, newpage = FALSE)
+      } else {
+        cttir_draw(name, family, mode = "dark", layout = "hex", small = TRUE, newpage = FALSE)
+      }
       grid::popViewport()
     })
     write_ico(directory)
@@ -193,6 +228,10 @@ script_files <- sub("^--file=", "", commandArgs(trailingOnly = FALSE)[
   grepl("^--file=", commandArgs(trailingOnly = FALSE))
 ])
 if (length(script_files) != 1L) stop("Run this file with Rscript.")
+# Square logos name the software in the installed JetBrains Mono ExtraBold,
+# which the bundled font profile would hide.
+Sys.setenv(CTTIR_FONTCONFIG = "off")
 source(file.path(dirname(normalizePath(script_files, mustWork = TRUE)), "R", "cttir_hex.R"))
+source(file.path(dirname(normalizePath(script_files, mustWork = TRUE)), "R", "square.R"))
 rm(script_files)
 run_branding()

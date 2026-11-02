@@ -5,7 +5,8 @@ base::names(cttir_accents) <- base::sub("^topic[.]", "", base::names(cttir_accen
 cttir_family_labels <- c(spectral="Spectral imaging", spatial="Spatial biology",
   omics="Molecular data", clinical="Clinical science", methods="Learning & inference",
   simulation="Systems & simulation", evidence="Evidence & discovery",
-  platform="Research infrastructure", brand="Science, connected")
+  platform="Research infrastructure", brand="Science, connected",
+  core="CTTIR core", apps="Apps & plugins")
 cttir_mix <- function(a,b,t) {
   z <- grDevices::col2rgb(a)*t + grDevices::col2rgb(b)*(1-t)
   grDevices::rgb(z[1],z[2],z[3],maxColorValue=255)
@@ -13,6 +14,7 @@ cttir_mix <- function(a,b,t) {
 cttir_alpha <- function(colour, alpha) grDevices::adjustcolor(colour,alpha.f=alpha)
 cttir_style <- function(family, mode="light") {
   if (mode=="primary") mode <- "dark"
+  if (family=="core") return(cttir_core_style(mode))
   base::stopifnot(family %in% base::names(cttir_accents), mode %in% c("light","dark","mono"))
   a <- cttir_accents[[family]]
   material <- if(family=="platform") "#8FAABD" else a
@@ -45,5 +47,18 @@ cttir_style <- function(family, mode="light") {
   vision <- base::getOption("cttir.vision","normal")
   if(vision!="normal") for(n in base::setdiff(base::names(s),"mode"))
     s[[n]] <- cttir_simulate_cvd(s[[n]],vision)
+  s
+}
+# CTTIR core, reserved for the institution logo and cttiR: the cttiR
+# (platform) scale with a gold accent on the rim. Light surfaces use the
+# deeper gold so it keeps 3:1 against white; greyscale stays shared.
+cttir_core_style <- function(mode="light") {
+  s <- cttir_style("platform", mode)
+  if (mode!="mono") {
+    g <- if (mode=="light") cttir_token("core","accent_light") else cttir_accents[["core"]]
+    vision <- base::getOption("cttir.vision","normal")
+    if (vision!="normal") g <- cttir_simulate_cvd(g,vision)
+    s$accent <- g; s$rim <- g
+  }
   s
 }
