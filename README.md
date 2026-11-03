@@ -51,7 +51,7 @@ appended once; temporal data is rewritten on every run with today's date.
 | `arXiv: <id>`      | Append once | Semantic Scholar |
 | `OpenAlex: W<id>`  | Append once | OpenAlex |
 | `Citations: <n> [<source>, YYYY-MM-DD]` | Rewritten every run | OpenAlex preferred; falls back to Crossref or Semantic Scholar |
-| `OpenAlex 2yr mean citedness: <x.xx> [OpenAlex 2yr mean citedness, YYYY-MM-DD]` | Rewritten every run | OpenAlex venue lookup |
+| `OpenAlex 2yr mean citedness: <x.xx> [OpenAlex 2yr mean citedness, YYYY-MM-DD]` | Rewritten every run | Identity-checked OpenAlex venue lookup; refreshed each UTC day |
 | `OA-URL: <url>`    | Rewritten every run | Cascade — OpenAlex → Unpaywall → OpenAIRE → CORE |
 | `Provenance: YYYY-MM-DD — field:source, …` | Rewritten on any change | derived from the actual merges performed |
 
@@ -83,7 +83,8 @@ OpenAlex are queried first because they have the highest signal for the
 biomedical items most users curate; the others fill gaps. Citation count is
 pinned to OpenAlex regardless of priority (with a fallback). The separately
 labelled 2-year mean citedness comes from OpenAlex; it is not a journal impact
-factor. Existing manual or legacy `Impact Factor:` lines are preserved.
+factor. Existing manual or legacy `Impact Factor:` lines are preserved. Conflicting
+  stable identifiers in Extra are retained in fill mode, including duplicate lines.
 
 The plugin adapts its request pacing automatically based on which keys are
 present. On HTTP **429** or **5xx** it retries up to twice, honouring
@@ -173,10 +174,13 @@ on upgrade: check **Update mode** if an earlier version enabled overwrite.
 ## Install
 
 **Declared compatibility:** Zotero 9.0 through 10.0.x. See the
-[qualification record](docs/AUDIT-2026-10-30.md) for tested behavior and limits.
+[qualification record](docs/AUDIT-2026-11-03.md) for tested behavior and limits.
 
-1. Download `metadata-mender-<version>.xpi` from the
-   [Releases page](https://github.com/CTTIR/metadata-mender/releases).
+No GitHub release asset was available at the 2026-11-03 audit. The supported
+first-use path is to build the current candidate locally using the commands
+below. The existing archived DOI does not provide this candidate installer.
+
+1. Build and verify `metadata-mender-0.6.2.xpi` as described in **Build from source**.
 2. In Zotero: **Tools → Plugins → gear icon → Install Plugin From File…**
 3. Select the `.xpi`. Restart Zotero if prompted.
 
@@ -187,17 +191,21 @@ Published guide: <https://cttir.github.io/metadata-mender/>. The local
 
 ## Build from source
 
-Prerequisites: Python 3.9 or later for packaging; Node.js 22 or later for tests.
+Prerequisites: Python 3.9 or later for packaging; Node.js 24 or later for tests.
 No dependency installation is needed. From the repository root:
 
 ```bash
-node --test tests/*.test.js*.test.js
+node --test tests/*.test.js
+python3 -m unittest discover -s tests -p 'test_*.py' -v
 ./build.sh
-python3 tools/build.py --check metadata-mender-0.6.1.xpi
+python3 tools/build.py --check metadata-mender-0.6.2.xpi
 ```
 
-Produces the current XPI deterministically and verifies its runtime files against
-source. Earlier version artifacts remain in place. Install this local XPI using
+Produces the current XPI deterministically and verifies its runtime files and
+advertised checksum against source. Identical rebuilds reuse the existing artifact;
+a different artifact at the same path is preserved and causes an actionable error.
+Use a separate output directory or increment the version after source changes.
+Runtime symlinks and output directories inside source subdirectories are refused. Install this local XPI using
 the steps above, then first try one disposable reference in a separate library
 with **Fill empty fields only** selected.
 
@@ -215,9 +223,25 @@ same checks and verifies the XPI; see the audit record for observed local result
 
 ## Release
 
-Push a tag `vX.Y.Z` matching `manifest.json`'s version. The `release` job in
-the CI workflow builds the XPI and attaches it to a GitHub release. Don't
-forget to bump `update.json` to the same version.
+Version 0.6.2 and `update.json` describe a prepared local candidate. No release
+or tag was created by this audit. After desktop qualification and release approval:
+
+1. Run all tests, build the XPI, and run `python3 tools/build.py --check` on it.
+   Confirm the version, release-tag URL and SHA-256 in `update.json` match exactly.
+2. Push the matching `v0.6.2` tag. The existing CI release job builds and attaches
+   the XPI. Download that actual asset and verify its SHA-256 before offering it
+   as an update.
+3. The current Quarto workflow renders only `docs/`; it does not serve the root
+   `update.json` at the manifest's declared update URL. Once the release asset
+   exists, copy the verified update file to `docs/update.json`, list `update.json`
+   under `project.resources` in `docs/_quarto.yml`, and publish that documentation
+   change. Verify the public endpoint returns the exact reviewed JSON and that its
+   download URL and checksum resolve to the released XPI. Do not publish an update
+   offer before its asset exists.
+
+The release, public update endpoint and real desktop installation are separate
+observations from a successful local build. [Release qualification evidence](docs/AUDIT-2026-11-03.md)
+records their current status.
 
 ## Notes & limitations
 
@@ -257,7 +281,7 @@ If Metadata Mender contributes to a publication, please cite it.
              metadata against PubMed, OpenAlex, Crossref, Semantic
              Scholar, OpenAIRE, Unpaywall, CORE, and CRAN},
   year    = {2026},
-  version = {0.6.1},
+  version = {0.6.2},
   url     = {https://github.com/CTTIR/metadata-mender},
   license = {MIT}
 }
@@ -267,11 +291,11 @@ If Metadata Mender contributes to a publication, please cite it.
 
 > Heller, R. (2026). *Metadata Mender: a Zotero plugin for reconciling item
 > metadata against PubMed, OpenAlex, Crossref, Semantic Scholar, OpenAIRE,
-> Unpaywall, CORE, and CRAN* (Version 0.6.1) [Computer software].
+> Unpaywall, CORE, and CRAN* (Version 0.6.2) [Computer software].
 > https://github.com/CTTIR/metadata-mender
 
 The archived 0.1.0 release has the DOI shown below. Do not treat that
-version-specific archive as a deposit of the local 0.6.1 candidate.
+version-specific archive as a deposit of the local 0.6.2 candidate.
 
 ## Links
 

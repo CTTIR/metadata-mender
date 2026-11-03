@@ -20,7 +20,7 @@ test("XPI builds reproducibly, matches source, and preserves earlier artifacts",
     assert.equal(fs.readFileSync(prior, "utf8"), "Prior reviewed artifact");
     const checked = JSON.parse(execFileSync("python3", ["tools/build.py", "--check", second.artifact], { cwd: root, encoding: "utf8" }));
     assert.equal(checked.source_matches, true);
-    assert.equal(checked.version, "0.6.1");
+    assert.equal(checked.version, "0.6.2");
     const update = JSON.parse(fs.readFileSync(path.join(root, "update.json"), "utf8"))
       .addons["metadata-mender@r-heller.github.io"].updates[0];
     assert.equal(update.version, checked.version);

@@ -1,1 +1,9 @@
 .navbar-logo { max-height: 80px; width: auto; }
+
+/* Keep navigation and reference evidence usable on narrow screens. */
+@media (max-width: 991.98px) {
+  .navbar-logo { max-height: 44px; }
+  .navbar-brand-container { min-width: 0; flex-shrink: 1; }
+  main :not(pre) > code { white-space: normal; overflow-wrap: anywhere; }
+  main table { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
+}

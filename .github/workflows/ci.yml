@@ -28,6 +28,8 @@ jobs:
           node --check content/metadata-mender.js
       - name: Run tests
         run: node --test tests/*.test.js
+      - name: Test package preservation and source boundaries
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Build and verify XPI
         run: |
           ./build.sh

@@ -198,7 +198,8 @@ Zotero.MetadataMender = {
   _upsertExtraLine(extra, key, value) {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp("^\\s*" + escaped + "\\s*:", "i");
-    const lines = (extra || "").split("\n");
+    const separator = ((extra || "").match(/\r\n|[\n\r\u2028\u2029]/) || ["\n"])[0];
+    const lines = (extra || "").split(/\r\n|[\n\r\u2028\u2029]/);
     const out = [];
     let replaced = false;
     for (const l of lines) {
@@ -214,7 +215,7 @@ Zotero.MetadataMender = {
     if (!replaced) out.push(`${key}: ${value}`);
     while (out.length && out[0] === "") out.shift();
     while (out.length && out[out.length - 1] === "") out.pop();
-    return out.join("\n");
+    return out.join(separator);
   },
 
   _appendExtraLineIfMissing(extra, key, value) {
@@ -230,10 +231,11 @@ Zotero.MetadataMender = {
   _removeExtraLine(extra, key) {
     const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp("^\\s*" + escaped + "\\s*:", "i");
-    const lines = (extra || "").split("\n").filter((l) => !re.test(l));
+    const separator = ((extra || "").match(/\r\n|[\n\r\u2028\u2029]/) || ["\n"])[0];
+    const lines = (extra || "").split(/\r\n|[\n\r\u2028\u2029]/).filter((l) => !re.test(l));
     while (lines.length && lines[0] === "") lines.shift();
     while (lines.length && lines[lines.length - 1] === "") lines.pop();
-    return lines.join("\n");
+    return lines.join(separator);
   },
 
   // Map common ISO 639-2 codes (as PubMed returns) to the ISO 639-1 codes
@@ -270,23 +272,28 @@ Zotero.MetadataMender = {
     return union ? inter / union : 0;
   },
 
-  // OpenAlex venue lookup for the 2-year mean citedness. Cached per session.
+  // Reuse only identity-checked venue readings from the same UTC day.
   async _getOpenAlexSource(sid) {
-    if (!sid) return null;
-    if (Object.prototype.hasOwnProperty.call(this._sourceCache, sid)) {
-      return this._sourceCache[sid];
+    if (typeof sid !== "string" || !/^S\d+$/.test(sid)) return null;
+    const today = this._today();
+    const cached = this._sourceCache[sid];
+    if (cached && cached.day === today) {
+      return cached.data;
     }
     const key = this.getPref(this.PREFS.openalexKey);
     let url = `https://api.openalex.org/sources/${encodeURIComponent(sid)}`;
     const headers = key ? { Authorization: "Bearer " + key } : {};
     try {
       const data = await this.RateLimiter.schedule("openalex", () => this._get(url, headers));
-      this._sourceCache[sid] = data || null;
+      if (data && data.id !== `https://openalex.org/${sid}`) {
+        throw new Error("OpenAlex source identity missing or differs");
+      }
+      this._sourceCache[sid] = { day: today, data: data || null };
     } catch (e) {
       Zotero.debug("Metadata Mender: openalex venue lookup failed: " + e);
       return null;
     }
-    return this._sourceCache[sid];
+    return this._sourceCache[sid].data;
   },
 
   // =========================================================================
@@ -317,6 +324,17 @@ Zotero.MetadataMender = {
     const extra = item.getField("extra") || "";
     const m = extra.match(/^\s*PMID:[ \t]*(\d+)/im);
     return m ? m[1] : null;
+  },
+
+  _normalizePMCID(value) {
+    if (typeof value !== "string") return null;
+    const text = value.trim();
+    const plain = /^PMC([1-9]\d*)$/i.exec(text);
+    if (plain) return `PMC${plain[1]}`;
+    // OpenAlex's explicit PMCID field also uses the old NCBI article URL
+    // without the PMC prefix. Accept only the documented NCBI host/path forms.
+    const article = /^https?:\/\/(?:(?:www\.)?ncbi\.nlm\.nih\.gov\/pmc|pmc\.ncbi\.nlm\.nih\.gov)\/articles\/(?:PMC)?([1-9]\d*)\/?$/i.exec(text);
+    return article ? `PMC${article[1]}` : null;
   },
 
   // R package on CRAN — triggered explicitly via a CRAN URL in the URL field
@@ -394,8 +412,8 @@ Zotero.MetadataMender = {
       const pmidMatch = String(data.ids.pmid || "").match(/(?:\/|^)(\d+)\/?$/);
       if (pmidMatch) rec.PMID = pmidMatch[1];
       if (data.ids.pmcid) {
-        const m = String(data.ids.pmcid).match(/PMC\d+/);
-        if (m) rec.PMCID = m[0];
+        const pmcid = this._normalizePMCID(data.ids.pmcid);
+        if (pmcid) rec.PMCID = pmcid;
       }
       if (data.ids.openalex) rec.openalexID = String(data.ids.openalex).split("/").pop();
     } else if (data.id) {
@@ -525,8 +543,11 @@ Zotero.MetadataMender = {
     }
     if (Array.isArray(doc.authors) && doc.authors.length) {
       rec.creators = doc.authors
-        .filter((a) => a.authtype === "Author")
-        .map((a) => this._splitName(a.name, true));
+        .filter((a) => a && ["Author", "CollectiveName"].includes(a.authtype)
+          && typeof a.name === "string" && a.name.trim())
+        .map((a) => a.authtype === "CollectiveName"
+          ? { firstName: "", lastName: a.name.trim(), fieldMode: 1, creatorType: "author" }
+          : this._splitName(a.name, true));
     }
     return rec;
   },
@@ -995,7 +1016,7 @@ Zotero.MetadataMender = {
       const venue = await this._getOpenAlexSource(oaRec._sourceId);
       const stats = venue && venue.summary_stats;
       const mc = stats && stats["2yr_mean_citedness"];
-      if (typeof mc === "number") oaRec.impactFactor2yr = mc;
+      if (Number.isFinite(mc) && mc >= 0) oaRec.impactFactor2yr = mc;
     }
   },
 
@@ -1103,9 +1124,11 @@ Zotero.MetadataMender = {
       if (!id.value) continue;
       const isNative = !!id.field && this._validField(item, id.field);
       const current = isNative ? item.getField(id.field) : "";
-      const extraMatch = extra.match(new RegExp("^\\s*" + id.extraKey + "\\s*:\\s*(.+)$", "im"));
+      const extraValues = [...extra.matchAll(new RegExp(
+        "^[ \\t]*" + id.extraKey + "[ \\t]*:[ \\t]*(.*)$", "gim"
+      ))].map(match => match[1].trim());
       if (mode === "fill" && ((current && String(current) !== String(id.value))
-          || (extraMatch && extraMatch[1].trim() !== String(id.value)))) continue;
+          || extraValues.some(value => value && value !== String(id.value)))) continue;
       if (isNative) {
         if (String(current) !== String(id.value)) {
           item.setField(id.field, id.value);
@@ -1115,13 +1138,15 @@ Zotero.MetadataMender = {
         const deduped = this._removeExtraLine(extra, id.extraKey);
         if (deduped !== extra) {
           extra = deduped;
-          changes.push({ field: "extra", to: `moved ${id.extraKey} to native field` });
+          changes.push({ field: "extra", to: `moved ${id.extraKey} to native field`, source: id.src });
+          if (id.src) provenance[id.extraKey] = id.src;
         }
       } else {
         const next = this._upsertExtraLine(extra, id.extraKey, id.value);
         if (next !== extra) {
           extra = next;
           changes.push({ field: "extra", to: `${id.extraKey}: ${id.value}`, source: id.src });
+          if (id.src) provenance[id.extraKey] = id.src;
         }
       }
     }
@@ -1133,20 +1158,21 @@ Zotero.MetadataMender = {
       semanticscholar: "Semantic Scholar",
     };
     let citationCount, citationSrc;
-    if (oaRec && typeof oaRec.citedByCount === "number") {
+    const validCount = value => Number.isSafeInteger(value) && value >= 0;
+    if (oaRec && validCount(oaRec.citedByCount)) {
       citationCount = oaRec.citedByCount;
       citationSrc = "openalex";
     } else {
       for (const src of priority) {
         const r = records[src];
-        if (r && typeof r.citedByCount === "number" && citationSources[src]) {
+        if (r && validCount(r.citedByCount) && citationSources[src]) {
           citationCount = r.citedByCount;
           citationSrc = src;
           break;
         }
       }
     }
-    if (typeof citationCount === "number") {
+    if (validCount(citationCount)) {
       const line = `${citationCount} [${citationSources[citationSrc]}, ${today}]`;
       const next = this._upsertExtraLine(extra, "Citations", line);
       if (next !== extra) {
@@ -1156,8 +1182,8 @@ Zotero.MetadataMender = {
       }
     }
 
-    // Impact-factor surrogate.
-    if (oaRec && typeof oaRec.impactFactor2yr === "number") {
+    // OpenAlex's venue metric is distinct from a journal impact factor.
+    if (oaRec && Number.isFinite(oaRec.impactFactor2yr) && oaRec.impactFactor2yr >= 0) {
       const v = oaRec.impactFactor2yr.toFixed(2);
       const line = `${v} [OpenAlex 2yr mean citedness, ${today}]`;
       const next = this._upsertExtraLine(extra, "OpenAlex 2yr mean citedness", line);
@@ -1195,7 +1221,8 @@ Zotero.MetadataMender = {
       const next = this._appendExtraLineIfMissing(extra, "CRAN", cran);
       if (next !== extra) {
         extra = next;
-        changes.push({ field: "extra", to: "CRAN: " + cran });
+        changes.push({ field: "extra", to: "CRAN: " + cran, source: "cran" });
+        provenance.CRAN = "cran";
       }
     }
     if (cranRec && cranRec.cranLicense) {
@@ -1211,6 +1238,7 @@ Zotero.MetadataMender = {
       if (next !== extra) {
         extra = next;
         changes.push({ field: "extra", to: "Upstream-URL: " + cranRec.cranUpstreamUrl, source: "cran" });
+        provenance["Upstream-URL"] = "cran";
       }
     }
 
@@ -1347,7 +1375,12 @@ Zotero.MetadataMender = {
       // Discard only this operation's staged changes; pending edits were refused
       // before lookup and the complete snapshot was checked immediately above.
       try {
-        await item.reload(["primaryData", "itemData", "creators", "tags"], true);
+        const dataTypes = ["primaryData", "itemData", "creators", "tags"];
+        await item.reload(dataTypes, true);
+        // Zotero's reload can retain staged tag values. Match its save-error
+        // recovery, limited to the categories just restored. An unavailable
+        // cleanup API follows the explicit recovery-failure path below.
+        for (const dataType of dataTypes) item._clearChanged(dataType);
       } catch (_) {
         throw new Error("Metadata save failed and item reload failed; reopen Zotero before continuing");
       }
@@ -1381,115 +1414,125 @@ Zotero.MetadataMender = {
     const onKey = (e) => { if (e.key === "Escape") this._cancelRequested = true; };
     window.addEventListener("keydown", onKey, false);
 
-    const progress = new Zotero.ProgressWindow({ closeOnClick: false });
-    progress.changeHeadline("Metadata Mender");
-    const icon = "chrome://zotero/skin/toolbar-advanced-search.png";
-    const line = new progress.ItemProgress(icon, "");
-    progress.show();
-
-    let updated = 0, skipped = 0, errored = 0, unchanged = 0, notfound = 0;
-    let done = 0;
-    const failures = [];
-
-    const concurrency = Math.max(
-      1,
-      Math.min(12, parseInt(this.getPref(this.PREFS.concurrency), 10) || 4)
-    );
-
-    const tick = async () => {
-      const total = items.length;
-      const tmpl =
-        (await this._t(window, "mm-progress-tick", { done, total })) ||
-        `Reconciling ${done}/${total}… (Esc to cancel)`;
-      line.setText(tmpl);
-      line.setProgress(total ? Math.round((100 * done) / total) : 100);
-    };
-    await tick();
-
-    // Worker pool — N workers race to pull the next item index. Per-source
-    // rate limits are still enforced by RateLimiter, so this only speeds up
-    // items that are bottlenecked on different sources or on idle scheduler time.
-    let nextIdx = 0;
-    const worker = async () => {
-      while (true) {
-        if (this._cancelRequested) return;
-        const i = nextIdx++;
-        if (i >= items.length) return;
-        const item = items[i];
-        try {
-          const res = await this.reconcileItem(item);
-          if (res.status === "updated") updated++;
-          else if (res.status === "skipped") skipped++;
-          else if (res.status === "notfound") notfound++;
-          else if (res.status === "error") {
-            errored++;
-            failures.push({ item, errors: res.errors || {}, reason: res.reason });
-          } else unchanged++;
-          if (res.status !== "error" && res.errors && Object.keys(res.errors).length) {
-            failures.push({ item, errors: res.errors, reason: "some sources could not be verified" });
-          }
-        } catch (e) {
-          errored++;
-          failures.push({ item, errors: { unexpected: String(e) }, reason: "exception" });
-          Zotero.debug("Metadata Mender: reconcile failed: " + e);
-        }
-        done++;
-        await tick();
-      }
-    };
-    const workerCount = Math.min(concurrency, items.length);
-    const workers = [];
-    for (let w = 0; w < workerCount; w++) workers.push(worker());
-
     try {
-      await Promise.all(workers);
+      const progress = new Zotero.ProgressWindow({ closeOnClick: false });
+      progress.changeHeadline("Metadata Mender");
+      const icon = "chrome://zotero/skin/toolbar-advanced-search.png";
+      const line = new progress.ItemProgress(icon, "");
+      progress.show();
+
+      let updated = 0, skipped = 0, errored = 0, unchanged = 0, notfound = 0;
+      let done = 0;
+      const failures = [];
+
+      const concurrency = Math.max(
+        1,
+        Math.min(12, parseInt(this.getPref(this.PREFS.concurrency), 10) || 4)
+      );
+
+      const tick = async () => {
+        const total = items.length;
+        const tmpl =
+          (await this._t(window, "mm-progress-tick", { done, total })) ||
+          `Reconciling ${done}/${total}… (Esc to cancel)`;
+        line.setText(tmpl);
+        line.setProgress(total ? Math.round((100 * done) / total) : 100);
+      };
+      await tick();
+
+      // Worker pool — N workers race to pull the next item index. Per-source
+      // rate limits are still enforced by RateLimiter, so this only speeds up
+      // items that are bottlenecked on different sources or on idle scheduler time.
+      let nextIdx = 0;
+      const worker = async () => {
+        while (true) {
+          if (this._cancelRequested) return;
+          const i = nextIdx++;
+          if (i >= items.length) return;
+          const item = items[i];
+          try {
+            const res = await this.reconcileItem(item);
+            if (res.status === "updated") updated++;
+            else if (res.status === "skipped") skipped++;
+            else if (res.status === "notfound") notfound++;
+            else if (res.status === "error") {
+              errored++;
+              failures.push({ item, errors: res.errors || {}, reason: res.reason });
+            } else unchanged++;
+            if (res.status !== "error" && res.errors && Object.keys(res.errors).length) {
+              failures.push({ item, errors: res.errors, reason: "some sources could not be verified" });
+            }
+          } catch (e) {
+            errored++;
+            failures.push({ item, errors: { unexpected: String(e) }, reason: "exception" });
+            Zotero.debug("Metadata Mender: reconcile failed: " + e);
+          }
+          done++;
+          await tick();
+        }
+      };
+      const workerCount = Math.min(concurrency, items.length);
+      const workers = [];
+      for (let w = 0; w < workerCount; w++) {
+        workers.push(worker().catch(error => {
+          // A broken progress UI must stop pending mutations, and the batch lock
+          // must remain held until every outstanding worker has settled.
+          this._cancelRequested = true;
+          throw error;
+        }));
+      }
+      const outcomes = await Promise.allSettled(workers);
+      const failure = outcomes.find(outcome => outcome.status === "rejected");
+      if (failure) throw failure.reason;
+
+      const cancelled = this._cancelRequested;
+
+      const summaryId = cancelled ? "mm-progress-cancelled" : "mm-progress-done";
+      const args = { updated, unchanged, skipped, notfound, errored };
+      const summary =
+        (await this._t(window, summaryId, args)) ||
+        `${cancelled ? "Cancelled." : "Done."} ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${notfound} not found, ${errored} errored.`;
+      line.setText(summary);
+      line.setProgress(100);
+
+      // Surface error details inline (up to 5 items); always log full details.
+      if (failures.length) {
+        const errIcon = "chrome://zotero/skin/cross.png";
+        const show = failures.slice(0, 5);
+        for (const f of show) {
+          let title = "";
+          try { title = f.item.getField("title") || ""; } catch (e) { /* ignore */ }
+          const shortTitle = title.length > 60 ? title.slice(0, 60) + "…" : title;
+          const reasons = Object.entries(f.errors)
+            .map(([s, m]) => `${s}: ${m}`)
+            .join(" · ");
+          const errLine = new progress.ItemProgress(
+            errIcon,
+            `${shortTitle || "[untitled]"} — ${reasons || f.reason || "unknown"}`
+          );
+          errLine.setProgress(100);
+        }
+        if (failures.length > 5) {
+          const moreLine = new progress.ItemProgress(
+            errIcon,
+            `…and ${failures.length - 5} more (see Help → Debug Output for full details)`
+          );
+          moreLine.setProgress(100);
+        }
+        for (const f of failures) {
+          Zotero.debug(
+            `Metadata Mender failure: itemID=${f.item.id} — ${JSON.stringify(f.errors)}`
+          );
+        }
+      }
+
+      progress.startCloseTimer(failures.length ? 15000 : 8000);
+    } catch (error) {
+      this._cancelRequested = true;
+      throw error;
     } finally {
       window.removeEventListener("keydown", onKey, false);
     }
-
-    const cancelled = this._cancelRequested;
-    this._cancelRequested = false;
-
-    const summaryId = cancelled ? "mm-progress-cancelled" : "mm-progress-done";
-    const args = { updated, unchanged, skipped, notfound, errored };
-    const summary =
-      (await this._t(window, summaryId, args)) ||
-      `${cancelled ? "Cancelled." : "Done."} ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${notfound} not found, ${errored} errored.`;
-    line.setText(summary);
-    line.setProgress(100);
-
-    // Surface error details inline (up to 5 items); always log full details.
-    if (failures.length) {
-      const errIcon = "chrome://zotero/skin/cross.png";
-      const show = failures.slice(0, 5);
-      for (const f of show) {
-        let title = "";
-        try { title = f.item.getField("title") || ""; } catch (e) { /* ignore */ }
-        const shortTitle = title.length > 60 ? title.slice(0, 60) + "…" : title;
-        const reasons = Object.entries(f.errors)
-          .map(([s, m]) => `${s}: ${m}`)
-          .join(" · ");
-        const errLine = new progress.ItemProgress(
-          errIcon,
-          `${shortTitle || "[untitled]"} — ${reasons || f.reason || "unknown"}`
-        );
-        errLine.setProgress(100);
-      }
-      if (failures.length > 5) {
-        const moreLine = new progress.ItemProgress(
-          errIcon,
-          `…and ${failures.length - 5} more (see Help → Debug Output for full details)`
-        );
-        moreLine.setProgress(100);
-      }
-      for (const f of failures) {
-        Zotero.debug(
-          `Metadata Mender failure: itemID=${f.item.id} — ${JSON.stringify(f.errors)}`
-        );
-      }
-    }
-
-    progress.startCloseTimer(failures.length ? 15000 : 8000);
   },
 
   async _t(window, id, args) {
