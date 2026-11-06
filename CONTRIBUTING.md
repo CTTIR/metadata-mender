@@ -16,7 +16,9 @@ The plugin is plain bootstrapped JavaScript — no build toolchain.
 
 ```bash
 ./build.sh           # produce metadata-mender-<version>.xpi
-node --test tests/   # run unit tests for the pure helpers
+node --test tests/*.test.js
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+python3 tools/build.py --check metadata-mender-0.6.2.xpi
 ```
 
 To try a local change, install the freshly built `.xpi` into Zotero via
@@ -31,7 +33,7 @@ plugin development docs).
   version.
 - Add or update an entry in `CHANGELOG.md` under `## [Unreleased]`.
 - Tests live in `tests/`. New pure helpers should ship with tests.
-- CI runs `node --test`, JSON validation, and a syntax check on every
+- CI runs `node --test`, JSON validation, Python artifact-boundary tests, and a syntax check on every
   push.
 
 ## Release
@@ -39,5 +41,6 @@ plugin development docs).
 1. Bump the version in `manifest.json` and `update.json`.
 2. Move the `Unreleased` entries in `CHANGELOG.md` under a new version
    heading.
-3. Commit, tag `vX.Y.Z`, push the tag. The release workflow builds the
-   `.xpi` and attaches it to a GitHub release.
+3. Follow the release checklist in `README.md`: publish and verify the actual
+   release asset before exposing its update offer. The prepared update metadata
+   does not establish that a release or update endpoint exists.

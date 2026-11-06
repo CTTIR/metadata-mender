@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Prepared 0.6.2 candidate
+
+- Preserve every conflicting stable identifier in fill mode and retain manual
+  Extra text across LF, CRLF, CR and Unicode line separators.
+- Cancel pending mutations after progress UI failures, retain the batch lock
+  until workers settle, and always remove cancellation listeners.
+- Check OpenAlex venue identity, refresh its cache each UTC day, and retain only
+  finite nonnegative metrics and whole citation counts.
+- Preserve OpenAlex PMC article-URL identifiers and PubMed explicit collective
+  authors; record source provenance for actual Extra-only changes.
+- Reject package source symlinks and nested output paths; preserve differing
+  same-version artifacts while allowing identical rebuilds. Verify the actual
+  update checksum and release-tag URL.
+- Correct source-build instructions and state the unavailable release/update
+  endpoint explicitly. No release or tag is created by these source changes.
+
 ## [0.6.1] - 2026-10-30
 
 ### Fixed
@@ -54,3 +70,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [Unreleased]: https://github.com/CTTIR/metadata-mender/compare/v0.6.1...HEAD
 [0.6.1]: https://github.com/CTTIR/metadata-mender/releases/tag/v0.6.1
 [0.6.0]: https://github.com/CTTIR/metadata-mender/releases/tag/v0.6.0
+
+- Restore pending tag state after failed native item saves; retain unsaved edits and allow clean retries.
+- Keep guide navigation, long code and audit tables within narrow mobile screens.
