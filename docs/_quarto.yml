@@ -23,6 +23,8 @@ website:
 
 format:
   html:
+    include-in-header:
+      - text: '<script defer data-domain="cttir.github.io/metadata-mender" src="https://analytics.hellebo.de/js/script.file-downloads.outbound-links.js"></script>'
     theme:
       dark: darkly
       light: flatly
