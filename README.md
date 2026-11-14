@@ -198,11 +198,13 @@ No dependency installation is needed. From the repository root:
 node --test tests/*.test.js
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 ./build.sh
-python3 tools/build.py --check metadata-mender-0.6.2.xpi
+python3 tools/build.py --check-source metadata-mender-0.6.2.xpi
 ```
 
-Produces the current XPI deterministically and verifies its runtime files and
-advertised checksum against source. Identical rebuilds reuse the existing artifact;
+Produces the current XPI deterministically and verifies its runtime files against source.
+`--check-source` reports whether the checksum also matches existing update metadata; it does not qualify a release.
+The strict `--check` command and tag-triggered release job still require that checksum to match.
+The existing `update.json` is preserved while this source candidate remains unreleased. Identical rebuilds reuse the existing artifact;
 a different artifact at the same path is preserved and causes an actionable error.
 Use a separate output directory or increment the version after source changes.
 Runtime symlinks and output directories inside source subdirectories are refused. Install this local XPI using
@@ -339,3 +341,19 @@ Local software setup: vLLM with Python/PyTorch, plus R and RStudio.
 The supplied CTTIR Coder Edition v5 artwork and its editable R source are in
 [`tools/branding`](tools/branding/README.md). Use that renderer to reproduce
 the primary badge, alternate editions, and platform icons.
+
+
+### Optional native Zotero qualification
+
+After building an XPI, run the explicit desktop check against an installed host:
+
+```sh
+python3 tools/test_zotero.py --zotero /Applications/Zotero.app/Contents/MacOS/zotero \
+  --xpi /absolute/path/to/the-built-plugin.xpi --output /tmp/new-plugin-evidence
+```
+
+The output directory must be new. The runner checks packaged bytes against this checkout, creates a fresh profile and synthetic data directory, verifies those actual paths inside Zotero, exercises real database operations and addon lifecycle, then stops only its owned child process group. Existing/default profiles are refused. Logs, exact host version, source/artifact hashes and fixture results remain in the output directory. No release is created and normal tests never launch or install the plugin.
+
+Bundled Word/LibreOffice installers, automatic sync, connector server, update checks, streaming, translator updates and retraction checks are disabled in the disposable profile. Fixture provider responses are local; these settings are not an operating-system network sandbox. The launcher supports macOS and Linux; Linux requires a display such as a separately managed Xvfb session. Actual host support must be qualified on each target version; the local reference run used Zotero 10.0.9. Python/Node unit tests remain separate from this opt-in desktop check.
+
+Fluent registration uses the constructors exposed by the actual Zotero window, retries when a window becomes available, and unregisters its source on unload. The shipped strings are English; hosts without the Fluent API retain the explicit English fallback.

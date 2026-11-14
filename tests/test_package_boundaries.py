@@ -49,6 +49,23 @@ class PackageBoundaries(unittest.TestCase):
         self.assertFalse(list(self.output.glob("*.partial")))
         self.assertFalse(list(self.output.glob(".*.partial")))
 
+    def test_source_verification_does_not_bypass_strict_release_checksum(self):
+        result = builder.build(self.output)
+        artifact = Path(result["artifact"])
+        update_path = self.root / "update.json"
+        metadata = json.loads(update_path.read_text())
+        entry = metadata["addons"]["metadata-mender@r-heller.github.io"]["updates"][0]
+        entry["update_hash"] = "sha256:" + "0" * 64
+        update_path.write_text(json.dumps(metadata))
+        checked = builder.verify(artifact, check_update_hash=False)
+        self.assertTrue(checked["source_matches"])
+        self.assertFalse(checked["update_hash_matches"])
+        with self.assertRaisesRegex(ValueError, "Update checksum differs"):
+            builder.verify(artifact)
+        entry["update_hash"] = "sha256:" + result["sha256"]
+        update_path.write_text(json.dumps(metadata))
+        self.assertTrue(builder.verify(artifact)["update_hash_matches"])
+
     def test_directory_symlinks_cannot_import_files_outside_source(self):
         external = self.base / "synthetic-external"
         external.mkdir()

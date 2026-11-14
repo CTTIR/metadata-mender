@@ -18,13 +18,13 @@ test("XPI builds reproducibly, matches source, and preserves earlier artifacts",
     assert.deepEqual(fs.readFileSync(second.artifact), bytes);
     assert.equal(first.sha256, second.sha256);
     assert.equal(fs.readFileSync(prior, "utf8"), "Prior reviewed artifact");
-    const checked = JSON.parse(execFileSync("python3", ["tools/build.py", "--check", second.artifact], { cwd: root, encoding: "utf8" }));
+    const checked = JSON.parse(execFileSync("python3", ["tools/build.py", "--check-source", second.artifact], { cwd: root, encoding: "utf8" }));
     assert.equal(checked.source_matches, true);
     assert.equal(checked.version, "0.6.2");
     const update = JSON.parse(fs.readFileSync(path.join(root, "update.json"), "utf8"))
       .addons["metadata-mender@r-heller.github.io"].updates[0];
     assert.equal(update.version, checked.version);
-    assert.equal(update.update_hash, `sha256:${checked.sha256}`);
+    assert.equal(checked.update_hash_matches, update.update_hash === `sha256:${checked.sha256}`);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

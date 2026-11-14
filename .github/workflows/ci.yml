@@ -33,7 +33,7 @@ jobs:
       - name: Build and verify XPI
         run: |
           ./build.sh
-          python3 tools/build.py --check "metadata-mender-$(node -p 'require("./manifest.json").version').xpi"
+          python3 tools/build.py --check-source "metadata-mender-$(node -p 'require("./manifest.json").version').xpi"
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

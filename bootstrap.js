@@ -6,10 +6,33 @@
 var MetadataMender;
 var chromeHandle;
 var l10nSourceRegistered = false;
+var l10nRegistry;
 const L10N_SOURCE_NAME = "metadata-mender";
 
 function log(msg) {
   Zotero.debug("Metadata Mender: " + msg);
+}
+
+// Fluent constructors belong to Zotero's chrome window, not the plugin sandbox.
+// Startup may precede a main window; onMainWindowLoad retries registration.
+function registerLocalization(window) {
+  if (l10nSourceRegistered) return;
+  try {
+    if (!window || typeof window.L10nFileSource !== "function"
+        || typeof window.L10nRegistry !== "function") {
+      throw new Error("Fluent constructors are unavailable in the current window");
+    }
+    const source = new window.L10nFileSource(
+      L10N_SOURCE_NAME, "app", ["en-US"],
+      "chrome://metadata-mender/locale/{locale}/"
+    );
+    l10nRegistry = window.L10nRegistry.getInstance();
+    l10nRegistry.registerSources([source]);
+    l10nSourceRegistered = true;
+  } catch (e) {
+    l10nRegistry = undefined;
+    log("L10n source registration failed (UI will use English fallbacks): " + e);
+  }
 }
 
 // ---- Lifecycle hooks ----
@@ -34,20 +57,7 @@ async function startup({ id, version, rootURI }) {
     ["locale", "metadata-mender", "en-US", rootURI + "locale/en-US/"],
   ]);
 
-  // Register the FTL as a Fluent file source so `MozXULElement.insertFTLIfNeeded`
-  // and `document.l10n.formatValue` can resolve `metadata-mender.ftl`.
-  try {
-    const source = new L10nFileSource(
-      L10N_SOURCE_NAME,
-      "app",
-      ["en-US"],
-      "chrome://metadata-mender/locale/{locale}/"
-    );
-    L10nRegistry.getInstance().registerSources([source]);
-    l10nSourceRegistered = true;
-  } catch (e) {
-    log("L10n source registration failed (UI will use English fallbacks): " + e);
-  }
+  registerLocalization(Zotero.getMainWindow());
 
   // Load the main module into the plugin sandbox.
   Services.scriptloader.loadSubScript(
@@ -77,11 +87,12 @@ function shutdown() {
   }
   if (l10nSourceRegistered) {
     try {
-      L10nRegistry.getInstance().removeSources([L10N_SOURCE_NAME]);
+      l10nRegistry.removeSources([L10N_SOURCE_NAME]);
     } catch (e) {
       log("L10n source removal failed: " + e);
     }
     l10nSourceRegistered = false;
+    l10nRegistry = undefined;
   }
   if (chromeHandle) {
     chromeHandle.destruct();
@@ -97,6 +108,7 @@ function uninstall() {
 
 function onMainWindowLoad({ window }) {
   if (MetadataMender) {
+    registerLocalization(window);
     MetadataMender.addToWindow(window);
   }
 }

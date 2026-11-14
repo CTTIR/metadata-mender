@@ -123,9 +123,16 @@ def build(output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=ROOT)
-    parser.add_argument("--check", type=Path, help="Verify an existing XPI against source and update checksum")
+    checks = parser.add_mutually_exclusive_group()
+    checks.add_argument("--check", type=Path, help="Strict release verification: source and declared update checksum")
+    checks.add_argument("--check-source", type=Path, help="Verify unreleased XPI bytes against source without accepting a release checksum")
     args = parser.parse_args()
-    result = verify(args.check) if args.check else build(args.output_dir)
+    if args.check:
+        result = verify(args.check)
+    elif args.check_source:
+        result = verify(args.check_source, check_update_hash=False)
+    else:
+        result = build(args.output_dir)
     print(json.dumps(result, indent=2))
 
 
